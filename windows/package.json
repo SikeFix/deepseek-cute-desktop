@@ -1,6 +1,6 @@
 {
   "name": "deepseek-cute-desktop-windows",
-  "version": "1.0.0",
+  "version": "1.4.1",
   "description": "DeepSeek Harness themed Windows desktop app with a task-aware desktop pet",
   "main": "main.js",
   "author": "sikefix",
@@ -8,7 +8,7 @@
   "private": false,
   "scripts": {
     "start": "electron .",
-    "build:win": "electron-builder --win portable --x64"
+    "build:win": "electron-builder --win nsis --x64"
   },
   "devDependencies": {
     "electron": "43.4.0",
@@ -18,9 +18,15 @@
   "build": {
     "appId": "com.sikefix.deepseek.cute.windows",
     "productName": "DeepSeek Cute",
-    "artifactName": "DeepSeek-Cute-Windows-x64-${version}.${ext}",
+    "artifactName": "DeepSeek-Cute-Windows-x64-Setup-${version}.${ext}",
     "asar": true,
     "compression": "maximum",
+    "electronLanguages": [
+      "zh-CN",
+      "en-US"
+    ],
+    "electronUpdaterCompatibility": ">=2.16",
+    "afterPack": "scripts/after-pack.js",
     "directories": {
       "output": "dist"
     },
@@ -31,6 +37,7 @@
       "window-inject.js",
       "waiting.html",
       "pet.html",
+      "scripts/after-pack.js",
       "assets/**/*",
       "package.json"
     ],
@@ -60,16 +67,35 @@
       "icon": "assets/icon.ico",
       "target": [
         {
-          "target": "portable",
+          "target": "nsis",
           "arch": [
             "x64"
           ]
         }
       ]
     },
-    "portable": {
-      "artifactName": "DeepSeek-Cute-Windows-x64-${version}.${ext}",
-      "requestExecutionLevel": "user"
-    }
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowElevation": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "DeepSeek Cute",
+      "runAfterFinish": true,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "SikeFix",
+        "repo": "deepseek-cute-desktop",
+        "releaseType": "release"
+      }
+    ]
+  },
+  "dependencies": {
+    "electron-log": "5.4.4",
+    "electron-updater": "6.8.9"
   }
 }

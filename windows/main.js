@@ -1,6 +1,7 @@
 const {
   app,
   BrowserWindow,
+  dialog,
   ipcMain,
   Menu,
   Notification,
@@ -9,6 +10,8 @@ const {
   screen,
   shell
 } = require('electron');
+const log = require('electron-log/main');
+const { autoUpdater } = require('electron-updater');
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const http = require('node:http');
@@ -16,12 +19,17 @@ const path = require('node:path');
 
 const APP_URL = 'http://127.0.0.1:3080';
 const APP_NAME = 'DeepSeek Cute';
+const APP_ID = 'com.sikefix.deepseek.cute.windows';
+const STARTED_AT = Date.now();
 
 let mainWindow;
 let petWindow;
 let tray;
 let backendProcess;
+let backendStarting = false;
+let backendLogStream;
 let healthTimer;
+let updateTimer;
 let healthFailures = 0;
 let quitting = false;
 let taskBusy = false;
@@ -30,9 +38,23 @@ let lastTaskTitle = '当前任务';
 let lastTaskURL = APP_URL;
 let petState = { mood: 'thinking', text: '正在启动服务…', color: '#f5dc26' };
 let dragState;
+let serviceStatus = { state: 'starting', message: '正在准备本地服务…' };
+let updateStatus = { state: 'idle', message: `当前版本 ${app.getVersion()}`, percent: 0 };
 
 const resourcePath = (...parts) => path.join(app.isPackaged ? process.resourcesPath : __dirname, ...parts);
 const petPositionPath = () => path.join(app.getPath('userData'), 'pet-position.json');
+
+log.initialize();
+log.transports.file.level = 'info';
+log.transports.console.level = 'info';
+
+function elapsed() {
+  return `${Date.now() - STARTED_AT}ms`;
+}
+
+function sendRendererStatus(channel, payload) {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
+}
 
 function formatDuration(milliseconds) {
   const seconds = Math.max(1, Math.round(milliseconds / 1000));
@@ -57,6 +79,26 @@ function checkOnline() {
   });
 }
 
+const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+async function waitForBackendReady(maxAttempts = 60) {
+  for (let attempt = 1; attempt <= maxAttempts && !quitting; attempt += 1) {
+    if (await checkOnline()) {
+      healthFailures = 0;
+      publishServiceStatus('online');
+      loadMainURL();
+      log.info(`[startup ${elapsed()}] backend ready after ${attempt} fast checks`);
+      return true;
+    }
+    if (attempt % 8 === 0) {
+      publishServiceStatus('starting', `本地服务正在初始化… ${Math.ceil(attempt / 4)}秒`);
+    }
+    await delay(250);
+  }
+  publishServiceStatus('offline', '服务启动超时，可点击重试或打开诊断日志');
+  return false;
+}
+
 function setPetState(mood, text, color) {
   petState = { mood, text, color };
   if (petWindow && !petWindow.isDestroyed()) {
@@ -64,7 +106,18 @@ function setPetState(mood, text, color) {
   }
 }
 
-function publishServiceStatus(status) {
+function publishServiceStatus(status, message) {
+  const messages = {
+    online: '本地 DeepSeek 服务已连接',
+    starting: '正在启动本地 DeepSeek 服务…',
+    offline: '本地服务暂时不可用'
+  };
+  const next = { state: status, message: message || messages[status] || messages.offline };
+  if (serviceStatus.state !== next.state || serviceStatus.message !== next.message) {
+    log.info(`[startup ${elapsed()}] service=${next.state} ${next.message}`);
+  }
+  serviceStatus = next;
+  sendRendererStatus('service-status', serviceStatus);
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.executeJavaScript(
       `window.__dsmSetServiceStatus && window.__dsmSetServiceStatus(${JSON.stringify(status)})`
@@ -76,38 +129,160 @@ function publishServiceStatus(status) {
   else setPetState('error', '服务异常 · 点我重试', '#fb684f');
 }
 
+function publishUpdateStatus(state, message, percent = updateStatus.percent || 0) {
+  const nextPercent = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
+  const stateChanged = updateStatus.state !== state;
+  const progressStepChanged = Math.floor(nextPercent / 10) !== Math.floor((updateStatus.percent || 0) / 10);
+  updateStatus = { state, message, percent: nextPercent };
+  if (stateChanged || progressStepChanged) log.info(`[update] ${state} ${nextPercent}% ${message}`);
+  sendRendererStatus('update-status', updateStatus);
+}
+
+let manualUpdateCheck = false;
+
+async function checkForUpdates(manual = false) {
+  if (!app.isPackaged || process.platform !== 'win32') {
+    publishUpdateStatus('disabled', '开发模式不执行在线更新');
+    return;
+  }
+  manualUpdateCheck = manual;
+  publishUpdateStatus('checking', '正在连接 GitHub 检查更新…', 0);
+  try {
+    await autoUpdater.checkForUpdates();
+  } catch (error) {
+    log.error('[update] check failed', error);
+    publishUpdateStatus('error', '更新检查失败，可稍后重试', 0);
+  }
+}
+
+function setupAutoUpdater() {
+  if (!app.isPackaged || process.platform !== 'win32') return;
+
+  autoUpdater.logger = log;
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.allowPrerelease = false;
+
+  autoUpdater.on('checking-for-update', () => {
+    publishUpdateStatus('checking', '正在连接 GitHub 检查更新…', 0);
+  });
+  autoUpdater.on('update-available', (info) => {
+    publishUpdateStatus('available', `发现 ${info.version}，正在后台下载…`, 0);
+  });
+  autoUpdater.on('update-not-available', () => {
+    publishUpdateStatus('current', `已是最新版 ${app.getVersion()}`, 100);
+    if (manualUpdateCheck && mainWindow && !mainWindow.isDestroyed()) {
+      dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: APP_NAME,
+        message: '已经是最新版',
+        detail: `当前版本 ${app.getVersion()}`
+      }).catch(() => {});
+    }
+    manualUpdateCheck = false;
+  });
+  autoUpdater.on('download-progress', (progress) => {
+    const speed = progress.bytesPerSecond > 0
+      ? `${(progress.bytesPerSecond / 1024 / 1024).toFixed(1)} MB/s`
+      : '正在下载';
+    publishUpdateStatus('downloading', `正在下载更新 · ${speed}`, progress.percent);
+  });
+  autoUpdater.on('update-downloaded', async (info) => {
+    publishUpdateStatus('ready', `${info.version} 已下载，等待安装`, 100);
+    const notice = Notification.isSupported() ? new Notification({
+      title: 'DeepSeek Cute 更新已准备好',
+      body: `版本 ${info.version} 已下载，点击即可安装。`,
+      icon: resourcePath('assets', 'icon.png')
+    }) : null;
+    notice?.on('click', () => showMain());
+    notice?.show();
+
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const result = await dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      title: '更新已下载',
+      message: `DeepSeek Cute ${info.version} 已准备好`,
+      detail: '现在安装会保存本地配置，关闭应用并自动重新启动。',
+      buttons: ['立即更新并重启', '稍后'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true
+    });
+    if (result.response === 0) {
+      quitting = true;
+      autoUpdater.quitAndInstall(false, true);
+    }
+  });
+  autoUpdater.on('error', (error) => {
+    log.error('[update] updater error', error);
+    publishUpdateStatus('error', '联网更新暂时失败，可点击重试', 0);
+    manualUpdateCheck = false;
+  });
+
+  setTimeout(() => checkForUpdates(false), 8000);
+  updateTimer = setInterval(() => checkForUpdates(false), 6 * 60 * 60 * 1000);
+}
+
 async function startBackend() {
-  if (backendProcess && !backendProcess.killed) return;
+  if ((backendProcess && !backendProcess.killed) || backendStarting) return;
+  backendStarting = true;
+  publishServiceStatus('starting', '正在检测本地 DeepSeek 服务…');
   if (await checkOnline()) {
+    backendStarting = false;
     publishServiceStatus('online');
+    loadMainURL();
     return;
   }
 
   const nodeExe = resourcePath('runtime', 'node', 'node.exe');
   const dshBin = resourcePath('runtime', 'dsh', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js');
   if (!fs.existsSync(nodeExe) || !fs.existsSync(dshBin)) {
+    backendStarting = false;
     publishServiceStatus('offline');
     showWaiting('内置运行组件不完整，请重新下载应用。');
     return;
   }
 
-  publishServiceStatus('starting');
-  backendProcess = spawn(nodeExe, [dshBin, 'web'], {
-    cwd: app.getPath('home'),
-    env: {
-      ...process.env,
-      NO_COLOR: '1',
-      PATH: `${path.dirname(nodeExe)};${process.env.PATH || ''}`
-    },
-    windowsHide: true,
-    stdio: 'ignore'
-  });
+  publishServiceStatus('starting', '组件已就绪，正在启动本地服务…');
+  const backendLogPath = path.join(app.getPath('userData'), 'backend.log');
+  backendLogStream = fs.createWriteStream(backendLogPath, { flags: 'a' });
+  backendLogStream.write(`\n[${new Date().toISOString()}] starting ${nodeExe} ${dshBin} web\n`);
+  try {
+    backendProcess = spawn(nodeExe, [dshBin, 'web'], {
+      cwd: app.getPath('home'),
+      env: {
+        ...process.env,
+        NO_COLOR: '1',
+        PATH: `${path.dirname(nodeExe)};${process.env.PATH || ''}`
+      },
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+  } catch (error) {
+    backendStarting = false;
+    backendLogStream.end(`\n[${new Date().toISOString()}] spawn failed: ${error.message}\n`);
+    backendLogStream = undefined;
+    log.error('[backend] spawn failed', error);
+    publishServiceStatus('offline', '本地服务启动失败，请打开诊断日志');
+    return;
+  }
+  backendStarting = false;
+  backendProcess.stdout.pipe(backendLogStream, { end: false });
+  backendProcess.stderr.pipe(backendLogStream, { end: false });
+  log.info(`[startup ${elapsed()}] backend spawned pid=${backendProcess.pid}`);
+  waitForBackendReady().catch((error) => log.error('[backend] readiness check failed', error));
 
-  backendProcess.once('error', () => {
+  backendProcess.once('error', (error) => {
+    log.error('[backend] spawn error', error);
+    backendLogStream?.end(`\n[${new Date().toISOString()}] spawn error: ${error.message}\n`);
+    backendLogStream = undefined;
     backendProcess = undefined;
     publishServiceStatus('offline');
   });
-  backendProcess.once('exit', () => {
+  backendProcess.once('exit', (code, signal) => {
+    log.warn(`[backend] exit code=${code} signal=${signal}`);
+    backendLogStream?.end(`\n[${new Date().toISOString()}] exit code=${code} signal=${signal}\n`);
+    backendLogStream = undefined;
     backendProcess = undefined;
     if (!quitting) {
       publishServiceStatus('offline');
@@ -163,7 +338,7 @@ function createMainWindow() {
     minWidth: 1000,
     minHeight: 660,
     frame: false,
-    show: false,
+    show: true,
     backgroundColor: '#17191a',
     icon: resourcePath('assets', 'icon.png'),
     webPreferences: {
@@ -174,11 +349,12 @@ function createMainWindow() {
     }
   });
 
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
-    mainWindow.focus();
+  mainWindow.webContents.on('did-finish-load', () => {
+    log.info(`[startup ${elapsed()}] renderer ready ${mainWindow.webContents.getURL()}`);
+    sendRendererStatus('service-status', serviceStatus);
+    sendRendererStatus('update-status', updateStatus);
+    injectTheme();
   });
-  mainWindow.webContents.on('did-finish-load', injectTheme);
   mainWindow.webContents.on('did-fail-load', () => showWaiting());
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
@@ -288,6 +464,8 @@ function createTray() {
     { label: '打开 DeepSeek', click: () => showMain() },
     { label: '显示/隐藏桌面宠物', click: () => petWindow?.isVisible() ? petWindow.hide() : petWindow.showInactive() },
     { label: '重试本地服务', click: () => startBackend() },
+    { label: '检查应用更新', click: () => checkForUpdates(true) },
+    { label: '打开诊断日志', click: () => shell.showItemInFolder(log.transports.file.getFile().path) },
     { type: 'separator' },
     { label: '退出', click: () => { quitting = true; app.quit(); } }
   ]));
@@ -305,6 +483,9 @@ ipcMain.on('dsm-service', (_event, command) => {
   if (command === 'recover') startBackend();
   else checkHealth(true);
 });
+
+ipcMain.on('dsm-update', () => checkForUpdates(true));
+ipcMain.handle('dsm-status', () => ({ service: serviceStatus, update: updateStatus }));
 
 ipcMain.on('dsm-pet', (_event, payload = {}) => {
   if (payload.event === 'busy') {
@@ -360,16 +541,18 @@ ipcMain.on('pet-drag-end', () => {
   savePetPosition();
 });
 
+app.setAppUserModelId(APP_ID);
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) app.quit();
 else {
   app.on('second-instance', () => showMain());
   app.whenReady().then(() => {
-    app.setAppUserModelId('com.sikefix.deepseek.cute.windows');
+    log.info(`[startup ${elapsed()}] app ready version=${app.getVersion()} packaged=${app.isPackaged}`);
     createMainWindow();
     createPetWindow();
     createTray();
     startBackend();
+    setupAutoUpdater();
     healthTimer = setInterval(() => checkHealth(true), 5000);
   });
 }
@@ -379,5 +562,7 @@ app.on('window-all-closed', (event) => event.preventDefault());
 app.on('before-quit', () => {
   quitting = true;
   clearInterval(healthTimer);
+  clearInterval(updateTimer);
   if (backendProcess && !backendProcess.killed) backendProcess.kill();
+  backendLogStream?.end();
 });

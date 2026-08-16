@@ -10,5 +10,9 @@ contextBridge.exposeInMainWorld('webkit', {
 contextBridge.exposeInMainWorld('deepseekDesktop', {
   windowAction: (action) => {
     if (['minimize', 'maximize', 'close'].includes(action)) ipcRenderer.send('window-action', action);
-  }
+  },
+  checkForUpdates: () => ipcRenderer.send('dsm-update'),
+  getStatus: () => ipcRenderer.invoke('dsm-status'),
+  onServiceStatus: (callback) => ipcRenderer.on('service-status', (_event, status) => callback(status)),
+  onUpdateStatus: (callback) => ipcRenderer.on('update-status', (_event, status) => callback(status))
 });

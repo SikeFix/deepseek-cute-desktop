@@ -27,6 +27,11 @@
     .status { display:inline-flex; align-items:center; gap:9px; margin-top:20px; padding:10px 16px; border-radius:999px; background:rgba(0,0,0,.24); }
     .dot { width:10px; height:10px; border-radius:50%; background:#55d8c2; box-shadow:0 0 18px #55d8c2; animation:pulse 1s ease-in-out infinite alternate; }
     .retry { display:block; margin:22px auto 0; padding:12px 24px; border:2px solid #2b2020; border-radius:14px; color:white; background:#fb684f; font-weight:800; font-size:15px; box-shadow:6px 7px 0 #f5dc26; cursor:pointer; }
+    .update { margin:18px auto 0; max-width:430px; padding:12px 14px; border-radius:16px; background:rgba(255,241,220,.07); color:#ead6b8; font-size:13px; }
+    .update-line { display:flex; align-items:center; justify-content:center; gap:10px; }
+    .check { border:0; padding:5px 9px; border-radius:9px; color:#55d8c2; background:rgba(85,216,194,.12); cursor:pointer; font-weight:700; }
+    .progress { display:none; height:6px; margin-top:10px; overflow:hidden; border-radius:999px; background:rgba(255,255,255,.1); }
+    .progress span { display:block; width:0; height:100%; border-radius:inherit; background:linear-gradient(90deg,#55d8c2,#f5dc26,#fb684f); transition:width .22s ease; }
     @keyframes think { from{transform:translateY(1px) rotate(-1deg)} to{transform:translateY(-8px) rotate(1deg)} }
     @keyframes pulse { to{transform:scale(1.25);opacity:.7} }
   </style>
@@ -37,13 +42,46 @@
     <img class="pet" src="assets/pet-thinking.png" alt="">
     <h1>DeepSeek</h1>
     <p id="message">正在等待本地 DeepSeek 服务启动…</p>
-    <div class="status"><span class="dot"></span><span>内置服务正在准备</span></div>
+    <div class="status"><span class="dot" id="service-dot"></span><span id="service-text">正在创建应用窗口…</span></div>
+    <div class="update">
+      <div class="update-line"><span id="update-text">启动后将自动检查 GitHub 更新</span><button class="check" id="check-update">检查更新</button></div>
+      <div class="progress" id="update-progress"><span></span></div>
+    </div>
     <button class="retry" id="retry">立即重试</button>
   </main>
   <script>
     const message = new URLSearchParams(location.search).get('message');
     if (message) document.querySelector('#message').textContent = message;
-    document.querySelector('#retry').addEventListener('click', () => window.webkit?.messageHandlers?.dsmService?.postMessage('recover'));
+    const serviceText = document.querySelector('#service-text');
+    const serviceDot = document.querySelector('#service-dot');
+    const retry = document.querySelector('#retry');
+    const updateText = document.querySelector('#update-text');
+    const updateProgress = document.querySelector('#update-progress');
+    const updateBar = updateProgress.querySelector('span');
+    retry.addEventListener('click', () => {
+      serviceText.textContent = '已收到重试请求，正在重新启动…';
+      window.webkit?.messageHandlers?.dsmService?.postMessage('recover');
+    });
+    document.querySelector('#check-update').addEventListener('click', () => window.deepseekDesktop?.checkForUpdates());
+    const renderServiceStatus = (status) => {
+      serviceText.textContent = status.message || '正在准备本地服务…';
+      const colors = { online:'#55d8c2', starting:'#f5dc26', offline:'#fb684f' };
+      serviceDot.style.background = colors[status.state] || colors.starting;
+      serviceDot.style.boxShadow = `0 0 18px ${colors[status.state] || colors.starting}`;
+      retry.style.display = status.state === 'offline' ? 'block' : 'none';
+    };
+    const renderUpdateStatus = (status) => {
+      updateText.textContent = status.message || '正在检查更新…';
+      const downloading = status.state === 'downloading';
+      updateProgress.style.display = downloading ? 'block' : 'none';
+      updateBar.style.width = `${status.percent || 0}%`;
+    };
+    window.deepseekDesktop?.onServiceStatus?.(renderServiceStatus);
+    window.deepseekDesktop?.onUpdateStatus?.(renderUpdateStatus);
+    window.deepseekDesktop?.getStatus?.().then(({ service, update }) => {
+      renderServiceStatus(service);
+      renderUpdateStatus(update);
+    }).catch(() => {});
     document.querySelectorAll('[data-action]').forEach(button => button.addEventListener('click', () => window.deepseekDesktop?.windowAction(button.dataset.action)));
   </script>
 </body>
