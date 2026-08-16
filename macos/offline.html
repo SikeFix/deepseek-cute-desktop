@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DeepSeek</title>
+<style>
+  :root { color-scheme: dark; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", sans-serif;
+    background:
+      radial-gradient(60% 50% at 78% 12%, rgba(224,169,79,.16), transparent 62%),
+      radial-gradient(45% 38% at 16% 92%, rgba(63,157,142,.14), transparent 60%),
+      linear-gradient(160deg, #101e20 0%, #16302e 45%, #1d3a34 100%);
+    color: #f7efdc;
+  }
+  .card {
+    text-align: center;
+    padding: 56px 72px;
+    border-radius: 24px;
+    background: rgba(30, 42, 40, 0.6);
+    border: 1px solid rgba(232, 205, 148, 0.16);
+    backdrop-filter: blur(30px) saturate(170%);
+    -webkit-backdrop-filter: blur(30px) saturate(170%);
+    box-shadow: 0 24px 64px rgba(10, 20, 20, 0.5);
+  }
+  .whale {
+    font-size: 64px;
+    filter: drop-shadow(0 10px 28px rgba(224,169,79,.4));
+    animation: float 3.4s ease-in-out infinite;
+  }
+  h1 { font-size: 28px; font-weight: 700; letter-spacing: .01em; margin-top: 18px; }
+  p { color: #b8b39a; font-size: 14px; margin-top: 10px; line-height: 1.7; }
+  .pulse { margin: 26px auto 0; width: 9px; height: 9px; border-radius: 50%;
+    background: #d99a3d; box-shadow: 0 0 0 0 rgba(224,169,79,.5); animation: pulse 1.6s ease-out infinite; }
+  button {
+    margin-top: 30px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    background: linear-gradient(135deg, #e0a94f, #c98a2e);
+    border: none;
+    border-radius: 12px;
+    padding: 11px 26px;
+    cursor: pointer;
+    box-shadow: 0 10px 24px rgba(217,154,61,.4);
+    transition: transform .15s ease, box-shadow .2s ease;
+  }
+  button:hover { transform: translateY(-1px); box-shadow: 0 14px 30px rgba(217,154,61,.55); }
+  button:active { transform: translateY(0); }
+  @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
+  @keyframes pulse { to { box-shadow: 0 0 0 12px rgba(224,169,79,0); } }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="whale">🐋</div>
+    <h1>DeepSeek</h1>
+    <p>正在等待本地 DeepSeek 服务启动…<br>请先在终端运行 <b>dsh web</b>，本窗口会自动连接。</p>
+    <div class="pulse"></div>
+    <button onclick="location.replace('http://127.0.0.1:3080')">立即重试</button>
+  </div>
+  <script>
+    setInterval(function () {
+      fetch('http://127.0.0.1:3080', { mode: 'no-cors', cache: 'no-store' })
+        .then(function () { location.replace('http://127.0.0.1:3080'); })
+        .catch(function () {});
+    }, 5000);
+  </script>
+</body>
+</html>

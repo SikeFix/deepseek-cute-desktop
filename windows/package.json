@@ -1,0 +1,75 @@
+{
+  "name": "deepseek-cute-desktop-windows",
+  "version": "1.0.0",
+  "description": "DeepSeek Harness themed Windows desktop app with a task-aware desktop pet",
+  "main": "main.js",
+  "author": "sikefix",
+  "license": "MIT",
+  "private": false,
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win portable --x64"
+  },
+  "devDependencies": {
+    "electron": "43.4.0",
+    "electron-builder": "26.15.3",
+    "png-to-ico": "^3.0.1"
+  },
+  "build": {
+    "appId": "com.sikefix.deepseek.cute.windows",
+    "productName": "DeepSeek Cute",
+    "artifactName": "DeepSeek-Cute-Windows-x64-${version}.${ext}",
+    "asar": true,
+    "compression": "maximum",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "pet-preload.js",
+      "window-inject.js",
+      "waiting.html",
+      "pet.html",
+      "assets/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "assets",
+        "to": "assets"
+      },
+      {
+        "from": "theme",
+        "to": "theme"
+      },
+      {
+        "from": "runtime/node",
+        "to": "runtime/node"
+      },
+      {
+        "from": "runtime/node_modules",
+        "to": "runtime/dsh/node_modules"
+      },
+      {
+        "from": "runtime/licenses",
+        "to": "runtime/licenses"
+      }
+    ],
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "DeepSeek-Cute-Windows-x64-${version}.${ext}",
+      "requestExecutionLevel": "user"
+    }
+  }
+}

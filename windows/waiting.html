@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>DeepSeek Cute</title>
+  <style>
+    :root { color-scheme: dark; font-family: "Segoe UI", system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    html, body { width:100%; height:100%; margin:0; overflow:hidden; color:#fff1dc; }
+    body {
+      background:
+        linear-gradient(100deg, rgba(16,17,18,.92), rgba(30,34,33,.64)),
+        url("assets/wallpaper.jpg") center/cover no-repeat;
+      display:grid; place-items:center;
+    }
+    .titlebar { position:fixed; inset:0 0 auto; height:38px; display:flex; align-items:center; padding-left:14px; background:linear-gradient(180deg,rgba(20,18,19,.72),transparent); -webkit-app-region:drag; }
+    .brand { font-weight:800; font-size:13px; }
+    .controls { margin-left:auto; height:38px; display:flex; -webkit-app-region:no-drag; }
+    .controls button { width:48px; border:0; color:#fff1dc; background:transparent; font-size:16px; }
+    .controls button:hover { background:rgba(85,216,194,.18); }
+    .controls button:last-child:hover { background:#e85b4f; }
+    .card { width:min(620px,calc(100vw - 72px)); padding:38px 44px 40px; border:1px solid rgba(85,216,194,.46); border-radius:28px; text-align:center; background:rgba(35,29,29,.86); backdrop-filter:blur(22px); box-shadow:10px 12px 0 rgba(245,220,38,.82),0 28px 90px rgba(0,0,0,.42); }
+    .pet { width:150px; height:150px; object-fit:contain; animation:think 1.5s ease-in-out infinite alternate; filter:drop-shadow(0 12px 18px rgba(0,0,0,.28)); }
+    h1 { margin:4px 0 10px; font-size:34px; }
+    p { margin:8px 0; color:#ead6b8; font-size:16px; }
+    .status { display:inline-flex; align-items:center; gap:9px; margin-top:20px; padding:10px 16px; border-radius:999px; background:rgba(0,0,0,.24); }
+    .dot { width:10px; height:10px; border-radius:50%; background:#55d8c2; box-shadow:0 0 18px #55d8c2; animation:pulse 1s ease-in-out infinite alternate; }
+    .retry { display:block; margin:22px auto 0; padding:12px 24px; border:2px solid #2b2020; border-radius:14px; color:white; background:#fb684f; font-weight:800; font-size:15px; box-shadow:6px 7px 0 #f5dc26; cursor:pointer; }
+    @keyframes think { from{transform:translateY(1px) rotate(-1deg)} to{transform:translateY(-8px) rotate(1deg)} }
+    @keyframes pulse { to{transform:scale(1.25);opacity:.7} }
+  </style>
+</head>
+<body>
+  <div class="titlebar"><span class="brand">✦ DeepSeek Cute</span><span class="controls"><button data-action="minimize">—</button><button data-action="maximize">□</button><button data-action="close">×</button></span></div>
+  <main class="card">
+    <img class="pet" src="assets/pet-thinking.png" alt="">
+    <h1>DeepSeek</h1>
+    <p id="message">正在等待本地 DeepSeek 服务启动…</p>
+    <div class="status"><span class="dot"></span><span>内置服务正在准备</span></div>
+    <button class="retry" id="retry">立即重试</button>
+  </main>
+  <script>
+    const message = new URLSearchParams(location.search).get('message');
+    if (message) document.querySelector('#message').textContent = message;
+    document.querySelector('#retry').addEventListener('click', () => window.webkit?.messageHandlers?.dsmService?.postMessage('recover'));
+    document.querySelectorAll('[data-action]').forEach(button => button.addEventListener('click', () => window.deepseekDesktop?.windowAction(button.dataset.action)));
+  </script>
+</body>
+</html>

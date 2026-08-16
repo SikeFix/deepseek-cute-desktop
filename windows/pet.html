@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    * { box-sizing:border-box; user-select:none; }
+    html, body { width:184px; height:194px; margin:0; overflow:hidden; background:transparent; font-family:"Segoe UI",system-ui,sans-serif; }
+    #pet { position:relative; width:184px; height:194px; cursor:grab; touch-action:none; }
+    #pet.dragging { cursor:grabbing; }
+    #mascot { position:absolute; top:0; left:9px; width:166px; height:166px; object-fit:contain; transform-origin:50% 72%; filter:drop-shadow(0 8px 9px rgba(0,0,0,.28)); pointer-events:none; }
+    #capsule { position:absolute; left:16px; bottom:2px; width:152px; height:31px; display:flex; align-items:center; gap:7px; padding:0 11px; border:1px solid rgba(255,255,255,.35); border-radius:16px; color:#fff4df; background:rgba(34,29,29,.78); backdrop-filter:blur(14px); box-shadow:0 6px 18px rgba(0,0,0,.25); pointer-events:none; }
+    #dot { width:8px; height:8px; flex:0 0 auto; border-radius:50%; background:#f5dc26; box-shadow:0 0 10px currentColor; }
+    #label { min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:12px; font-weight:700; }
+    #pet[data-mood="idle"] #mascot { animation:idle 2.6s ease-in-out infinite alternate; }
+    #pet[data-mood="thinking"] #mascot { animation:thinking 1.35s ease-in-out infinite alternate; }
+    #pet[data-mood="error"] #mascot { animation:worry 1.8s ease-in-out infinite; }
+    #pet[data-mood="complete"] #mascot { animation:celebrate .86s ease-in-out 2; }
+    #pet:hover #capsule { background:rgba(34,29,29,.92); }
+    @keyframes idle { from{transform:translateY(1px) scale(1)} to{transform:translateY(-4px) scale(1.018)} }
+    @keyframes thinking { from{transform:translateY(1px) rotate(-1.2deg)} to{transform:translateY(-3px) rotate(1.2deg)} }
+    @keyframes worry { 0%,45%,100%{transform:translateX(0)} 7%{transform:translateX(-2px)} 14%{transform:translateX(2px)} 21%{transform:translateX(-1.5px)} 28%{transform:translateX(1.5px)} }
+    @keyframes celebrate { 0%,100%{transform:translateY(0) scale(1)} 28%{transform:translateY(-13px) scale(1.06)} 58%{transform:translateY(0) scale(.98)} 78%{transform:translateY(-7px) scale(1.03)} }
+    @media (prefers-reduced-motion:reduce) { #mascot{animation:none!important} }
+  </style>
+</head>
+<body>
+  <div id="pet" data-mood="thinking" title="拖动小助手 · 单击打开 · 右键更多">
+    <img id="mascot" src="assets/pet-thinking.png" alt="桌面小助手">
+    <div id="capsule"><span id="dot"></span><span id="label">正在启动服务…</span></div>
+  </div>
+  <script>
+    const pet = document.querySelector('#pet');
+    const mascot = document.querySelector('#mascot');
+    const dot = document.querySelector('#dot');
+    const label = document.querySelector('#label');
+    let pointerId = null;
+    let start = null;
+    let moved = false;
+
+    window.petBridge.onState((state) => {
+      const mood = ['idle','thinking','complete','error'].includes(state.mood) ? state.mood : 'idle';
+      pet.dataset.mood = mood;
+      mascot.src = `assets/pet-${mood}.png`;
+      dot.style.background = state.color || '#55d8c2';
+      dot.style.color = state.color || '#55d8c2';
+      label.textContent = state.text || 'DeepSeek 已连接';
+    });
+
+    pet.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) return;
+      pointerId = event.pointerId;
+      start = { x:event.screenX, y:event.screenY };
+      moved = false;
+      pet.classList.add('dragging');
+      pet.setPointerCapture(pointerId);
+      window.petBridge.dragStart(start);
+    });
+    pet.addEventListener('pointermove', (event) => {
+      if (event.pointerId !== pointerId || !start) return;
+      if (Math.hypot(event.screenX-start.x,event.screenY-start.y) > 4) moved = true;
+      window.petBridge.dragMove({ x:event.screenX, y:event.screenY });
+    });
+    pet.addEventListener('pointerup', (event) => {
+      if (event.pointerId !== pointerId) return;
+      pet.classList.remove('dragging');
+      window.petBridge.dragEnd();
+      if (!moved) window.petBridge.openMain();
+      pointerId = null;
+      start = null;
+    });
+    pet.addEventListener('contextmenu', (event) => {
+      event.preventDefault();
+      window.petBridge.contextMenu();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DeepSeek</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --coral: #f36b50;
+    --sun: #f5dc26;
+    --mint: #62e8d3;
+    --slate: #587273;
+    --ink: #211a19;
+    --cream: #fff1d7;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", sans-serif;
+    background: var(--slate);
+    color: var(--cream);
+    overflow: hidden;
+  }
+  body::before,
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+  }
+  body::before {
+    background: url("PopTheme/cute-boy-wallpaper.jpg") center / cover no-repeat;
+    filter: saturate(.96) contrast(.98);
+  }
+  body::after {
+    background:
+      radial-gradient(42% 36% at 86% 14%, rgba(245,220,38,.20), transparent 64%),
+      linear-gradient(90deg, rgba(25,24,24,.62), rgba(25,24,24,.40), rgba(55,68,68,.48));
+  }
+  .card {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    padding: 56px 72px;
+    border-radius: 20px;
+    background: rgba(42, 37, 35, .78);
+    border: 2px solid rgba(98, 232, 211, .40);
+    backdrop-filter: blur(30px) saturate(170%);
+    -webkit-backdrop-filter: blur(30px) saturate(170%);
+    box-shadow: 7px 8px 0 rgba(245,220,38,.76), 0 24px 64px rgba(33,26,25,.52);
+  }
+  .mascot {
+    width: 82px;
+    height: 82px;
+    display: block;
+    margin: 0 auto;
+    object-fit: cover;
+    border-radius: 24px;
+    border: 3px solid rgba(255, 255, 255, .92);
+    box-shadow: 4px 5px 0 var(--sun), 0 10px 28px rgba(243,107,80,.50);
+    filter: drop-shadow(0 10px 28px rgba(243,107,80,.50));
+    animation: float 3.4s ease-in-out infinite;
+  }
+  h1 { font-size: 28px; font-weight: 700; letter-spacing: .01em; margin-top: 18px; }
+  p { color: #e1cdb4; font-size: 14px; margin-top: 10px; line-height: 1.7; }
+  .pulse { margin: 26px auto 0; width: 9px; height: 9px; border-radius: 50%;
+    background: var(--mint); box-shadow: 0 0 0 0 rgba(98,232,211,.55); animation: pulse 1.6s ease-out infinite; }
+  button {
+    margin-top: 30px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    background: var(--coral);
+    border: 2px solid var(--ink);
+    border-radius: 12px;
+    padding: 11px 26px;
+    cursor: pointer;
+    box-shadow: 4px 5px 0 var(--sun), 0 10px 24px rgba(33,26,25,.40);
+    transition: transform .15s ease, box-shadow .2s ease;
+  }
+  button:hover { transform: translateY(-1px); box-shadow: 5px 6px 0 var(--sun), 0 14px 30px rgba(33,26,25,.55); }
+  button:active { transform: translateY(0); }
+  @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
+  @keyframes pulse { to { box-shadow: 0 0 0 12px rgba(98,232,211,0); } }
+</style>
+</head>
+<body>
+  <div class="card">
+    <img class="mascot" src="PopTheme/mascot.png" alt="">
+    <h1>DeepSeek</h1>
+    <p>正在自动启动本地 DeepSeek 服务…<br>无需打开终端，服务就绪后会自动连接。</p>
+    <div class="pulse"></div>
+    <button onclick="location.replace('http://127.0.0.1:3080')">重新连接</button>
+  </div>
+  <script>
+    setInterval(function () {
+      fetch('http://127.0.0.1:3080', { mode: 'no-cors', cache: 'no-store' })
+        .then(function () { location.replace('http://127.0.0.1:3080'); })
+        .catch(function () {});
+    }, 5000);
+  </script>
+</body>
+</html>
