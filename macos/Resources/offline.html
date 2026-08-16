@@ -92,16 +92,26 @@
   <div class="card">
     <img class="mascot" src="PopTheme/mascot.png" alt="">
     <h1>DeepSeek</h1>
-    <p>正在自动启动本地 DeepSeek 服务…<br>无需打开终端，服务就绪后会自动连接。</p>
+    <p id="message">正在检测内置运行组件…<br>服务就绪后会立即进入主界面。</p>
     <div class="pulse"></div>
-    <button onclick="location.replace('http://127.0.0.1:3080')">重新连接</button>
+    <button id="retry">重新启动服务</button>
   </div>
   <script>
+    var message = document.getElementById('message');
+    window.__dsmSetServiceStatus = function (status) {
+      if (status === 'online') message.innerHTML = '本地服务已连接，正在进入主界面…';
+      else if (status === 'starting') message.innerHTML = '组件已就绪，正在启动本地服务…<br>第一次启动可能需要几秒。';
+      else message.innerHTML = '本地服务暂时不可用。<br>可以重试，或从菜单栏打开诊断日志。';
+    };
+    document.getElementById('retry').addEventListener('click', function () {
+      message.innerHTML = '已收到重试请求，正在重新启动…';
+      window.webkit && window.webkit.messageHandlers.dsmService.postMessage('recover');
+    });
     setInterval(function () {
       fetch('http://127.0.0.1:3080', { mode: 'no-cors', cache: 'no-store' })
         .then(function () { location.replace('http://127.0.0.1:3080'); })
         .catch(function () {});
-    }, 5000);
+    }, 1000);
   </script>
 </body>
 </html>

@@ -1,4 +1,5 @@
 import Cocoa
+import ServiceManagement
 import WebKit
 import UserNotifications
 
@@ -20,6 +21,35 @@ enum PetMood: String {
     case error = "pet-error"
 }
 
+struct GitHubRelease: Decodable {
+    struct Asset: Decodable {
+        let name: String
+        let browserDownloadURL: URL
+
+        enum CodingKeys: String, CodingKey {
+            case name
+            case browserDownloadURL = "browser_download_url"
+        }
+    }
+
+    let tagName: String
+    let htmlURL: URL
+    let assets: [Asset]
+
+    enum CodingKeys: String, CodingKey {
+        case tagName = "tag_name"
+        case htmlURL = "html_url"
+        case assets
+    }
+}
+
+struct TaskRecord: Codable {
+    let title: String
+    let duration: TimeInterval
+    let url: String?
+    let completedAt: Date
+}
+
 final class PetView: NSView {
     private let mascotView = NSImageView()
     private let statusCapsule = NSVisualEffectView()
@@ -32,9 +62,12 @@ final class PetView: NSView {
     private var currentMood: PetMood?
 
     var onActivate: (() -> Void)?
+    var onInteract: (() -> Void)?
     var onRetry: (() -> Void)?
     var onHide: (() -> Void)?
     var onTestCompletion: (() -> Void)?
+    var onStartFocus: ((Int) -> Void)?
+    var onCancelFocus: (() -> Void)?
     var onMoveFinished: ((NSPoint) -> Void)?
 
     override init(frame frameRect: NSRect) {
@@ -170,6 +203,7 @@ final class PetView: NSView {
             if let origin = window?.frame.origin { onMoveFinished?(origin) }
         } else {
             reactToTap()
+            onInteract?()
             onActivate?()
         }
         didDrag = false
@@ -180,6 +214,16 @@ final class PetView: NSView {
         menu.addItem(withTitle: "打开 DeepSeek", action: #selector(activateFromMenu), keyEquivalent: "")
         menu.addItem(withTitle: "重试本地服务", action: #selector(retryFromMenu), keyEquivalent: "")
         menu.addItem(withTitle: "测试完成提醒", action: #selector(testFromMenu), keyEquivalent: "")
+        let focusItem = NSMenuItem(title: "专注计时", action: nil, keyEquivalent: "")
+        let focusMenu = NSMenu(title: "专注计时")
+        focusMenu.addItem(withTitle: "专注 25 分钟", action: #selector(focus25FromMenu), keyEquivalent: "")
+        focusMenu.addItem(withTitle: "深度专注 50 分钟", action: #selector(focus50FromMenu), keyEquivalent: "")
+        focusMenu.addItem(withTitle: "休息 10 分钟", action: #selector(break10FromMenu), keyEquivalent: "")
+        focusMenu.addItem(.separator())
+        focusMenu.addItem(withTitle: "取消计时", action: #selector(cancelFocusFromMenu), keyEquivalent: "")
+        for item in focusMenu.items { item.target = self }
+        focusItem.submenu = focusMenu
+        menu.addItem(focusItem)
         menu.addItem(.separator())
         menu.addItem(withTitle: "隐藏桌面宠物", action: #selector(hideFromMenu), keyEquivalent: "")
         for item in menu.items { item.target = self }
@@ -189,6 +233,10 @@ final class PetView: NSView {
     @objc private func activateFromMenu() { onActivate?() }
     @objc private func retryFromMenu() { onRetry?() }
     @objc private func testFromMenu() { onTestCompletion?() }
+    @objc private func focus25FromMenu() { onStartFocus?(25) }
+    @objc private func focus50FromMenu() { onStartFocus?(50) }
+    @objc private func break10FromMenu() { onStartFocus?(10) }
+    @objc private func cancelFocusFromMenu() { onCancelFocus?() }
     @objc private func hideFromMenu() { onHide?() }
 
     func setMood(_ mood: PetMood, text: String, color: NSColor) {
@@ -290,9 +338,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     var webView: WKWebView!
     var backendProcess: Process?
     var healthTimer: Timer?
+    var updateTimer: Timer?
+    var focusTimer: Timer?
+    var focusEndDate: Date?
+    var focusTitle = "专注时间"
     var backendStartedAt: Date?
+    var backendLogHandle: FileHandle?
     var consecutiveHealthFailures = 0
     var isTerminating = false
+    var statusItem: NSStatusItem?
+    var serviceMenuItem: NSMenuItem?
+    var loginItemMenuItem: NSMenuItem?
+    var historyMenu = NSMenu(title: "最近完成任务")
+    var updateCheckInProgress = false
+    var updateDownloadInProgress = false
     var petPanel: NSPanel?
     var petView: PetView?
     var taskBusy = false
@@ -300,10 +359,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     var taskStartedAt: Date?
     var lastTaskTitle = "当前任务"
     var lastTaskURL: String?
+    var taskHistory: [TaskRecord] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        writeAppLog("application launched version=\(version)")
+        loadTaskHistory()
         buildMenu()
+        buildStatusItem()
 
         let config = WKWebViewConfiguration()
         let controller = WKUserContentController()
@@ -352,9 +416,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         buildDesktopPet()
         configureNotifications()
 
+        showOffline()
         startBackendIfNeeded()
         startHealthMonitor()
-        loadApp()
+        startUpdateMonitor()
         NSApp.activate(ignoringOtherApps: true)
     }
 
@@ -370,16 +435,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     func applicationWillTerminate(_ notification: Notification) {
         isTerminating = true
         healthTimer?.invalidate()
+        updateTimer?.invalidate()
+        focusTimer?.invalidate()
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "dsmService")
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "dsmPet")
         if let process = backendProcess, process.isRunning {
             process.terminate()
         }
+        try? backendLogHandle?.close()
     }
 
     func loadApp() {
         guard let url = URL(string: APP_URL) else { return }
         webView.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 8))
+    }
+
+    func logsDirectory() -> URL {
+        let base = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
+        let directory = base.appendingPathComponent("Logs/DeepSeek Cute", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    func logFile(named name: String) -> URL {
+        let url = logsDirectory().appendingPathComponent(name)
+        if !FileManager.default.fileExists(atPath: url.path) {
+            FileManager.default.createFile(atPath: url.path, contents: nil)
+        }
+        return url
+    }
+
+    func writeAppLog(_ message: String) {
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        guard let data = "[\(timestamp)] \(message)\n".data(using: .utf8) else { return }
+        let url = logFile(named: "app.log")
+        guard let handle = try? FileHandle(forWritingTo: url) else { return }
+        do {
+            try handle.seekToEnd()
+            try handle.write(contentsOf: data)
+            try handle.close()
+        } catch {
+            try? handle.close()
+        }
+    }
+
+    func prepareBackendLog() -> FileHandle? {
+        try? backendLogHandle?.close()
+        let url = logFile(named: "backend.log")
+        guard let handle = try? FileHandle(forWritingTo: url) else { return nil }
+        _ = try? handle.seekToEnd()
+        if let header = "\n[\(ISO8601DateFormatter().string(from: Date()))] starting backend\n".data(using: .utf8) {
+            try? handle.write(contentsOf: header)
+        }
+        backendLogHandle = handle
+        return handle
     }
 
     func startBackendIfNeeded() {
@@ -391,6 +500,138 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         healthTimer = Timer.scheduledTimer(withTimeInterval: 8, repeats: true) { [weak self] _ in
             self?.checkBackend(shouldRecover: true)
         }
+    }
+
+    func startUpdateMonitor() {
+        updateTimer?.invalidate()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 12) { [weak self] in
+            self?.checkForUpdates(manual: false)
+        }
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 6 * 60 * 60, repeats: true) { [weak self] _ in
+            self?.checkForUpdates(manual: false)
+        }
+    }
+
+    @objc func checkForUpdatesFromMenu() {
+        checkForUpdates(manual: true)
+    }
+
+    func checkForUpdates(manual: Bool) {
+        guard !updateCheckInProgress else { return }
+        updateCheckInProgress = true
+        if manual, !taskBusy {
+            petView?.setMood(.thinking, text: "正在检查更新…", color: .systemYellow)
+        }
+        guard let url = URL(string: "https://api.github.com/repos/SikeFix/deepseek-cute-desktop/releases/latest") else { return }
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
+        request.setValue("DeepSeek-Cute-macOS/\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0")", forHTTPHeaderField: "User-Agent")
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.updateCheckInProgress = false
+                if let error {
+                    self.writeAppLog("update check failed: \(error.localizedDescription)")
+                    if manual { self.showAlert(title: "检查更新失败", message: error.localizedDescription) }
+                    self.publishServiceStatus(self.lastServiceStatus)
+                    return
+                }
+                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                guard (200..<300).contains(status), let data,
+                      let release = try? JSONDecoder().decode(GitHubRelease.self, from: data) else {
+                    if manual { self.showAlert(title: "检查更新失败", message: "GitHub 返回的数据无法读取。") }
+                    self.publishServiceStatus(self.lastServiceStatus)
+                    return
+                }
+                let current = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
+                let latest = release.tagName.trimmingCharacters(in: CharacterSet(charactersIn: "vV"))
+                self.writeAppLog("update check current=\(current) latest=\(latest)")
+                guard self.isVersion(latest, newerThan: current) else {
+                    if manual { self.showAlert(title: "已经是最新版", message: "当前版本 \(current)") }
+                    self.publishServiceStatus(self.lastServiceStatus)
+                    return
+                }
+                guard let asset = release.assets.first(where: {
+                    $0.name.lowercased().hasSuffix(".dmg") &&
+                    ($0.name.lowercased().contains("m2") || $0.name.lowercased().contains("mac"))
+                }) else {
+                    if manual { NSWorkspace.shared.open(release.htmlURL) }
+                    return
+                }
+                self.offerUpdate(version: latest, asset: asset, releaseURL: release.htmlURL)
+            }
+        }.resume()
+    }
+
+    func isVersion(_ candidate: String, newerThan current: String) -> Bool {
+        let lhs = candidate.split(separator: ".").map { Int($0.prefix { $0.isNumber }) ?? 0 }
+        let rhs = current.split(separator: ".").map { Int($0.prefix { $0.isNumber }) ?? 0 }
+        for index in 0..<max(lhs.count, rhs.count) {
+            let left = index < lhs.count ? lhs[index] : 0
+            let right = index < rhs.count ? rhs[index] : 0
+            if left != right { return left > right }
+        }
+        return false
+    }
+
+    func offerUpdate(version: String, asset: GitHubRelease.Asset, releaseURL: URL) {
+        let alert = NSAlert()
+        alert.messageText = "发现 DeepSeek \(version)"
+        alert.informativeText = "可以从 GitHub 下载新版 DMG。下载完成后会自动打开安装镜像。"
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "下载更新")
+        alert.addButton(withTitle: "查看发布页")
+        alert.addButton(withTitle: "稍后")
+        NSApp.activate(ignoringOtherApps: true)
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn { downloadUpdate(asset: asset, version: version) }
+        else if response == .alertSecondButtonReturn { NSWorkspace.shared.open(releaseURL) }
+    }
+
+    func downloadUpdate(asset: GitHubRelease.Asset, version: String) {
+        guard !updateDownloadInProgress else { return }
+        updateDownloadInProgress = true
+        if !taskBusy { petView?.setMood(.thinking, text: "正在下载 \(version)…", color: .systemYellow) }
+        writeAppLog("update download started asset=\(asset.name)")
+        URLSession.shared.downloadTask(with: asset.browserDownloadURL) { [weak self] temporaryURL, _, error in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.updateDownloadInProgress = false
+                if let error {
+                    self.writeAppLog("update download failed: \(error.localizedDescription)")
+                    self.showAlert(title: "更新下载失败", message: error.localizedDescription)
+                    self.publishServiceStatus(self.lastServiceStatus)
+                    return
+                }
+                guard let temporaryURL else { return }
+                let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
+                var destination = downloads.appendingPathComponent(asset.name)
+                if FileManager.default.fileExists(atPath: destination.path) {
+                    destination = downloads.appendingPathComponent("DeepSeek-Cute-macOS-\(version)-\(Int(Date().timeIntervalSince1970)).dmg")
+                }
+                do {
+                    try FileManager.default.moveItem(at: temporaryURL, to: destination)
+                    self.writeAppLog("update downloaded to \(destination.path)")
+                    if !self.taskBusy {
+                        self.petView?.setMood(.complete, text: "更新已下载！", color: .systemGreen)
+                        self.petView?.celebrate()
+                    }
+                    NSWorkspace.shared.open(destination)
+                } catch {
+                    self.showAlert(title: "保存更新失败", message: error.localizedDescription)
+                }
+            }
+        }.resume()
+    }
+
+    func showAlert(title: String, message: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "好")
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
     }
 
     func checkBackend(shouldRecover: Bool) {
@@ -405,6 +646,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 if online {
                     self.consecutiveHealthFailures = 0
                     self.publishServiceStatus("online")
+                    let host = self.webView.url?.host ?? ""
+                    if host != "127.0.0.1" && host != "localhost" {
+                        self.loadApp()
+                    }
                     return
                 }
 
@@ -425,6 +670,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                     DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
                         self?.launchBackend()
                     }
+                }
+            }
+        }.resume()
+    }
+
+    func fastHealthPoll(attempt: Int = 0) {
+        guard attempt < 60, !isTerminating else { return }
+        guard let url = URL(string: APP_URL) else { return }
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 1.0)
+        request.httpMethod = "HEAD"
+        URLSession.shared.dataTask(with: request) { [weak self] _, response, _ in
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let online = (200..<500).contains(status)
+            DispatchQueue.main.async {
+                guard let self, !self.isTerminating else { return }
+                if online {
+                    self.consecutiveHealthFailures = 0
+                    self.publishServiceStatus("online")
+                    self.loadApp()
+                    self.writeAppLog("backend ready after \(attempt + 1) fast checks")
+                    return
+                }
+                if attempt > 0, attempt % 8 == 0 {
+                    self.petView?.setMood(.thinking, text: "服务初始化 · \((attempt + 1) / 4)秒", color: .systemYellow)
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                    self?.fastHealthPoll(attempt: attempt + 1)
                 }
             }
         }.resume()
@@ -472,14 +744,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         environment["NO_COLOR"] = "1"
         process.environment = environment
         process.currentDirectoryURL = fileManager.homeDirectoryForCurrentUser
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
+        if let backendLog = prepareBackendLog() {
+            process.standardOutput = backendLog
+            process.standardError = backendLog
+        } else {
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
+        }
         process.terminationHandler = { [weak self] finished in
             DispatchQueue.main.async {
                 if self?.backendProcess?.processIdentifier == finished.processIdentifier {
                     self?.backendProcess = nil
                 }
                 guard let self, !self.isTerminating else { return }
+                self.writeAppLog("backend exited status=\(finished.terminationStatus)")
+                try? self.backendLogHandle?.close()
+                self.backendLogHandle = nil
                 self.publishServiceStatus("offline")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
                     self?.checkBackend(shouldRecover: true)
@@ -491,15 +771,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             try process.run()
             backendProcess = process
             backendStartedAt = Date()
+            fastHealthPoll()
+            writeAppLog("backend started pid=\(process.processIdentifier) runtime=\(runtimeLabel)")
             NSLog("DSM_BACKEND_STARTED: %d (%@)", process.processIdentifier, runtimeLabel)
         } catch {
             NSLog("DSM_BACKEND_FAIL: %@", error.localizedDescription)
+            writeAppLog("backend launch failed: \(error.localizedDescription)")
+            try? backendLogHandle?.close()
+            backendLogHandle = nil
             publishServiceStatus("offline")
         }
     }
 
     func publishServiceStatus(_ status: String) {
         lastServiceStatus = status
+        let statusLabels = [
+            "online": "● 服务已连接",
+            "starting": "● 服务启动中",
+            "offline": "● 服务异常"
+        ]
+        serviceMenuItem?.title = statusLabels[status] ?? "● 服务状态未知"
+        statusItem?.button?.contentTintColor = status == "online" ? .systemGreen : (status == "starting" ? .systemYellow : .systemRed)
         guard webView != nil else { return }
         let script = "window.__dsmSetServiceStatus && window.__dsmSetServiceStatus('" + status + "')"
         webView.evaluateJavaScript(script, completionHandler: nil)
@@ -561,6 +853,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 petView?.setMood(.complete, text: "完成 · " + durationLabel, color: .systemGreen)
                 petView?.celebrate()
                 notifyTaskCompletion(lastTaskTitle, duration: duration, taskURL: lastTaskURL)
+                recordTask(title: lastTaskTitle, duration: duration, url: lastTaskURL)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in
                     guard let self, !self.taskBusy else { return }
                     self.publishServiceStatus(self.lastServiceStatus)
@@ -600,9 +893,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
         let view = PetView(frame: NSRect(origin: .zero, size: size))
         view.onActivate = { [weak self] in self?.activateFromPet() }
+        view.onInteract = { [weak self] in self?.showPetReaction() }
         view.onRetry = { [weak self] in self?.requestBackendRecovery() }
         view.onHide = { [weak panel] in panel?.orderOut(nil) }
         view.onTestCompletion = { [weak self] in self?.testPetCompletion() }
+        view.onStartFocus = { [weak self] minutes in self?.startFocusTimer(minutes: minutes) }
+        view.onCancelFocus = { [weak self] in self?.cancelFocusTimer() }
         view.onMoveFinished = { point in
             UserDefaults.standard.set(point.x, forKey: "DSMPetOriginX")
             UserDefaults.standard.set(point.y, forKey: "DSMPetOriginY")
@@ -611,6 +907,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         panel.orderFrontRegardless()
         petPanel = panel
         petView = view
+    }
+
+    func loadTaskHistory() {
+        guard let data = UserDefaults.standard.data(forKey: "DSMTaskHistory"),
+              let records = try? JSONDecoder().decode([TaskRecord].self, from: data) else { return }
+        taskHistory = Array(records.prefix(8))
+    }
+
+    func recordTask(title: String, duration: TimeInterval, url: String?) {
+        let record = TaskRecord(title: title, duration: duration, url: url, completedAt: Date())
+        taskHistory.insert(record, at: 0)
+        taskHistory = Array(taskHistory.prefix(8))
+        if let data = try? JSONEncoder().encode(taskHistory) {
+            UserDefaults.standard.set(data, forKey: "DSMTaskHistory")
+        }
+        rebuildHistoryMenu()
+    }
+
+    func rebuildHistoryMenu() {
+        historyMenu.removeAllItems()
+        guard !taskHistory.isEmpty else {
+            let empty = NSMenuItem(title: "还没有完成记录", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            historyMenu.addItem(empty)
+            return
+        }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MM-dd HH:mm"
+        for record in taskHistory {
+            let label = "\(formatter.string(from: record.completedAt)) · \(record.title) · \(formatDuration(record.duration))"
+            let item = NSMenuItem(title: label, action: #selector(openHistoricalTask(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = record.url
+            item.isEnabled = record.url != nil
+            historyMenu.addItem(item)
+        }
+        historyMenu.addItem(.separator())
+        let clear = NSMenuItem(title: "清除历史", action: #selector(clearTaskHistory), keyEquivalent: "")
+        clear.target = self
+        historyMenu.addItem(clear)
+    }
+
+    @objc func openHistoricalTask(_ sender: NSMenuItem) {
+        openTask(sender.representedObject as? String)
+    }
+
+    @objc func clearTaskHistory() {
+        taskHistory.removeAll()
+        UserDefaults.standard.removeObject(forKey: "DSMTaskHistory")
+        rebuildHistoryMenu()
     }
 
     func configureNotifications() {
@@ -688,6 +1034,74 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         }
     }
 
+    func showPetReaction() {
+        guard !taskBusy else { return }
+        let phrases = ["我在呢！", "一起加油呀", "今天也很棒", "要记得喝水", "摸摸收到啦", "随时可以找我"]
+        petView?.setMood(.idle, text: phrases.randomElement() ?? "我在呢！", color: .systemGreen)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) { [weak self] in
+            guard let self, !self.taskBusy else { return }
+            if self.focusEndDate != nil { self.updateFocusTimer() }
+            else { self.publishServiceStatus(self.lastServiceStatus) }
+        }
+    }
+
+    func startFocusTimer(minutes: Int) {
+        focusTimer?.invalidate()
+        focusTitle = minutes == 10 ? "休息时间" : "专注时间"
+        focusEndDate = Date().addingTimeInterval(TimeInterval(minutes * 60))
+        focusTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            self?.updateFocusTimer()
+        }
+        updateFocusTimer()
+        writeAppLog("focus timer started minutes=\(minutes)")
+    }
+
+    func updateFocusTimer() {
+        guard let endDate = focusEndDate else { return }
+        let remaining = Int(ceil(endDate.timeIntervalSinceNow))
+        if remaining <= 0 {
+            finishFocusTimer()
+            return
+        }
+        guard !taskBusy else { return }
+        let minutes = remaining / 60
+        let seconds = remaining % 60
+        petView?.setMood(.thinking, text: String(format: "%@ · %02d:%02d", focusTitle, minutes, seconds), color: .systemYellow)
+    }
+
+    func finishFocusTimer() {
+        focusTimer?.invalidate()
+        focusTimer = nil
+        focusEndDate = nil
+        writeAppLog("focus timer completed title=\(focusTitle)")
+        let content = UNMutableNotificationContent()
+        content.title = "DeepSeek · \(focusTitle)完成"
+        content.body = focusTitle == "休息时间" ? "休息结束啦，可以精神满满地回来。" : "专注完成！起来活动一下吧。"
+        content.sound = .default
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: "dsm-focus-" + UUID().uuidString, content: content, trigger: nil)
+        )
+        guard !taskBusy else { return }
+        petView?.setMood(.complete, text: "\(focusTitle)完成！", color: .systemGreen)
+        petView?.celebrate()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in
+            guard let self, !self.taskBusy else { return }
+            self.publishServiceStatus(self.lastServiceStatus)
+        }
+    }
+
+    @objc func cancelFocusTimer() {
+        focusTimer?.invalidate()
+        focusTimer = nil
+        focusEndDate = nil
+        writeAppLog("focus timer cancelled")
+        if !taskBusy { publishServiceStatus(lastServiceStatus) }
+    }
+
+    @objc func startFocus25() { startFocusTimer(minutes: 25) }
+    @objc func startFocus50() { startFocusTimer(minutes: 50) }
+    @objc func startBreak10() { startFocusTimer(minutes: 10) }
+
     @objc func toggleDesktopPet() {
         guard let panel = petPanel else { return }
         panel.isVisible ? panel.orderOut(nil) : panel.orderFrontRegardless()
@@ -749,6 +1163,135 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     // MARK: - Menu
 
+    func buildStatusItem() {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        item.button?.image = NSImage(systemSymbolName: "message.fill", accessibilityDescription: "DeepSeek Cute")
+        item.button?.toolTip = "DeepSeek Cute · 本地助手"
+
+        let menu = NSMenu(title: "DeepSeek Cute")
+        let service = NSMenuItem(title: "● 服务启动中", action: nil, keyEquivalent: "")
+        service.isEnabled = false
+        menu.addItem(service)
+        serviceMenuItem = service
+        menu.addItem(.separator())
+
+        let open = NSMenuItem(title: "打开 DeepSeek", action: #selector(activateFromPet), keyEquivalent: "")
+        open.target = self
+        menu.addItem(open)
+        let pet = NSMenuItem(title: "显示/隐藏桌面宠物", action: #selector(toggleDesktopPet), keyEquivalent: "")
+        pet.target = self
+        menu.addItem(pet)
+        let restart = NSMenuItem(title: "重启本地服务", action: #selector(restartBackendFromMenu), keyEquivalent: "")
+        restart.target = self
+        menu.addItem(restart)
+
+        let focus = NSMenuItem(title: "专注计时", action: nil, keyEquivalent: "")
+        let focusMenu = NSMenu(title: "专注计时")
+        let focus25 = NSMenuItem(title: "专注 25 分钟", action: #selector(startFocus25), keyEquivalent: "")
+        let focus50 = NSMenuItem(title: "深度专注 50 分钟", action: #selector(startFocus50), keyEquivalent: "")
+        let break10 = NSMenuItem(title: "休息 10 分钟", action: #selector(startBreak10), keyEquivalent: "")
+        let cancel = NSMenuItem(title: "取消计时", action: #selector(cancelFocusTimer), keyEquivalent: "")
+        for entry in [focus25, focus50, break10, cancel] { entry.target = self }
+        focusMenu.addItem(focus25)
+        focusMenu.addItem(focus50)
+        focusMenu.addItem(break10)
+        focusMenu.addItem(.separator())
+        focusMenu.addItem(cancel)
+        focus.submenu = focusMenu
+        menu.addItem(focus)
+
+        rebuildHistoryMenu()
+        let history = NSMenuItem(title: "最近完成任务", action: nil, keyEquivalent: "")
+        history.submenu = historyMenu
+        menu.addItem(history)
+        menu.addItem(.separator())
+
+        let update = NSMenuItem(title: "检查 GitHub 更新", action: #selector(checkForUpdatesFromMenu), keyEquivalent: "")
+        update.target = self
+        menu.addItem(update)
+        let login = NSMenuItem(title: "登录时自动启动", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        login.target = self
+        menu.addItem(login)
+        loginItemMenuItem = login
+        refreshLoginItemState()
+        let logs = NSMenuItem(title: "打开诊断日志", action: #selector(openDiagnosticLogs), keyEquivalent: "")
+        logs.target = self
+        menu.addItem(logs)
+        let copy = NSMenuItem(title: "复制诊断信息", action: #selector(copyDiagnostics), keyEquivalent: "")
+        copy.target = self
+        menu.addItem(copy)
+        menu.addItem(.separator())
+        let quit = NSMenuItem(title: "退出 DeepSeek", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
+        menu.addItem(quit)
+
+        item.menu = menu
+        statusItem = item
+    }
+
+    @objc func restartBackendFromMenu() {
+        requestBackendRecovery()
+    }
+
+    @objc func openDiagnosticLogs() {
+        NSWorkspace.shared.open(logsDirectory())
+    }
+
+    @objc func copyDiagnostics() {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+        let details = """
+        DeepSeek Cute \(version) (\(build))
+        macOS \(ProcessInfo.processInfo.operatingSystemVersionString)
+        Service: \(lastServiceStatus)
+        Runtime: \(backendProcess?.isRunning == true ? "running" : "stopped")
+        Logs: \(logsDirectory().path)
+        """
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(details, forType: .string)
+        if !taskBusy {
+            petView?.setMood(.idle, text: "诊断信息已复制", color: .systemGreen)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                guard let self, !self.taskBusy else { return }
+                self.publishServiceStatus(self.lastServiceStatus)
+            }
+        }
+    }
+
+    func refreshLoginItemState() {
+        guard #available(macOS 13.0, *) else {
+            loginItemMenuItem?.isEnabled = false
+            return
+        }
+        switch SMAppService.mainApp.status {
+        case .enabled:
+            loginItemMenuItem?.state = .on
+            loginItemMenuItem?.title = "登录时自动启动"
+        case .requiresApproval:
+            loginItemMenuItem?.state = .mixed
+            loginItemMenuItem?.title = "登录启动 · 等待系统批准"
+        default:
+            loginItemMenuItem?.state = .off
+            loginItemMenuItem?.title = "登录时自动启动"
+        }
+    }
+
+    @objc func toggleLaunchAtLogin() {
+        guard #available(macOS 13.0, *) else { return }
+        do {
+            if SMAppService.mainApp.status == .enabled {
+                try SMAppService.mainApp.unregister()
+            } else {
+                try SMAppService.mainApp.register()
+                if SMAppService.mainApp.status == .requiresApproval {
+                    SMAppService.openSystemSettingsLoginItems()
+                }
+            }
+        } catch {
+            showAlert(title: "无法修改登录启动", message: error.localizedDescription)
+        }
+        refreshLoginItemState()
+    }
+
     func buildMenu() {
         let mainMenu = NSMenu()
 
@@ -760,6 +1303,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         appMenu.addItem(withTitle: "隐藏 " + APP_NAME, action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(withTitle: "显示/隐藏桌面宠物", action: #selector(AppDelegate.toggleDesktopPet), keyEquivalent: "p")
         appMenu.addItem(withTitle: "测试任务完成提醒", action: #selector(AppDelegate.testPetCompletion), keyEquivalent: "")
+        appMenu.addItem(.separator())
+        let updateItem = appMenu.addItem(withTitle: "检查 GitHub 更新", action: #selector(AppDelegate.checkForUpdatesFromMenu), keyEquivalent: "")
+        updateItem.target = self
+        let logsItem = appMenu.addItem(withTitle: "打开诊断日志", action: #selector(AppDelegate.openDiagnosticLogs), keyEquivalent: "")
+        logsItem.target = self
+        let diagnosticsItem = appMenu.addItem(withTitle: "复制诊断信息", action: #selector(AppDelegate.copyDiagnostics), keyEquivalent: "")
+        diagnosticsItem.target = self
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "退出 " + APP_NAME, action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
