@@ -1,4 +1,5 @@
 import Cocoa
+import Security
 import ServiceManagement
 import WebKit
 import UserNotifications
@@ -360,6 +361,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     var lastTaskTitle = "当前任务"
     var lastTaskURL: String?
     var taskHistory: [TaskRecord] = []
+    var interfaceTheme = UserDefaults.standard.string(forKey: "DSMInterfaceTheme") ?? "cute"
+    var themeOfficialMenuItems: [NSMenuItem] = []
+    var themeCuteMenuItems: [NSMenuItem] = []
+    let providerWizardVersion = "2026-08-v4-vision-qwen-1"
+    let qwenEndpoint = "https://ai-xtu.yangrucheng.eu.org/v1"
+    let qwenKeychainService = "com.sikefix.deepseek-cute.provider"
+    let qwenKeychainAccount = "QWEN_API_KEY"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -372,12 +380,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let config = WKWebViewConfiguration()
         let controller = WKUserContentController()
 
-        // 注入 macOS 主题 CSS（资源文件 theme.css）
+        // 注入可切换的正太主题；官方模式保留 Harness 原生样式。
         if let cssURL = Bundle.main.url(forResource: "theme", withExtension: "css"),
            let css = try? String(contentsOf: cssURL, encoding: .utf8),
            let jsonData = try? JSONSerialization.data(withJSONObject: [css]),
            let json = String(data: jsonData, encoding: .utf8) {
-            let script = "window.__dsmMac=true;(function(){try{var s=document.createElement('style');s.setAttribute('data-dsm-mac','app');s.textContent=" + json + ";document.documentElement.appendChild(s);}catch(e){console.error('DSM_CSS',e);}})();"
+            let initialTheme = interfaceTheme == "official" ? "official" : "cute"
+            let script = "window.__dsmMac=true;window.__dsmThemeMode='" + initialTheme + "';(function(){try{var s=document.createElement('style');s.id='dsm-theme-style';s.setAttribute('data-dsm-mac','app');s.textContent=" + json + ";s.disabled=window.__dsmThemeMode==='official';document.documentElement.dataset.dsmTheme=window.__dsmThemeMode;document.documentElement.appendChild(s);window.__dsmApplyTheme=function(mode){window.__dsmThemeMode=mode;document.documentElement.dataset.dsmTheme=mode;var style=document.getElementById('dsm-theme-style');if(style)style.disabled=mode==='official';window.__dsmSetThemeMode&&window.__dsmSetThemeMode(mode);};}catch(e){console.error('DSM_CSS',e);}})();"
             controller.addUserScript(WKUserScript(source: script, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         }
 
@@ -421,6 +430,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         startHealthMonitor()
         startUpdateMonitor()
         NSApp.activate(ignoringOtherApps: true)
+        if UserDefaults.standard.string(forKey: "DSMProviderWizardVersion") != providerWizardVersion {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+                self?.showModelProviderWizard()
+            }
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -634,6 +648,153 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         alert.runModal()
     }
 
+    func setKeychainPassword(_ password: String) -> Bool {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: qwenKeychainService,
+            kSecAttrAccount as String: qwenKeychainAccount
+        ]
+        SecItemDelete(query as CFDictionary)
+        var item = query
+        item[kSecValueData as String] = Data(password.utf8)
+        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        return SecItemAdd(item as CFDictionary, nil) == errSecSuccess
+    }
+
+    func keychainPassword() -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: qwenKeychainService,
+            kSecAttrAccount as String: qwenKeychainAccount,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    @discardableResult
+    func applyProviderConfig(provider: String, endpoint: String? = nil, model: String? = nil) -> Bool {
+        guard let node = Bundle.main.url(forResource: "node", withExtension: nil, subdirectory: "Runtime/bin"),
+              let script = Bundle.main.url(forResource: "provider-config", withExtension: "mjs", subdirectory: "Provider"),
+              let modules = Bundle.main.resourceURL?.appendingPathComponent("Runtime/dsh/node_modules") else {
+            showAlert(title: "模型设置不可用", message: "应用内置配置组件不完整，请重新安装最新版。")
+            return false
+        }
+        let process = Process()
+        process.executableURL = node
+        var arguments = [script.path, "--modules", modules.path, "--provider", provider]
+        if let endpoint { arguments += ["--baseURL", endpoint] }
+        if let model { arguments += ["--model", model] }
+        process.arguments = arguments
+        process.standardOutput = FileHandle.nullDevice
+        let errorPipe = Pipe()
+        process.standardError = errorPipe
+        do {
+            try process.run()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0 else {
+                let data = errorPipe.fileHandleForReading.readDataToEndOfFile()
+                let detail = String(data: data, encoding: .utf8) ?? "配置写入失败"
+                showAlert(title: "模型设置失败", message: detail)
+                return false
+            }
+            writeAppLog("model provider configured provider=\(provider)")
+            return true
+        } catch {
+            showAlert(title: "模型设置失败", message: error.localizedDescription)
+            return false
+        }
+    }
+
+    @objc func showModelProviderWizard() {
+        let alert = NSAlert()
+        alert.messageText = "选择默认模型服务"
+        alert.informativeText = "DeepSeek 官方模式已支持 V4 Flash、V4 Pro 与最新 V4 Vision 图片理解；也可以使用你的本地千问兼容接口。"
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "DeepSeek 官方 V4")
+        alert.addButton(withTitle: "本地千问")
+        alert.addButton(withTitle: "稍后设置")
+        NSApp.activate(ignoringOtherApps: true)
+        let choice = alert.runModal()
+        if choice == .alertFirstButtonReturn {
+            if applyProviderConfig(provider: "official") {
+                UserDefaults.standard.set(providerWizardVersion, forKey: "DSMProviderWizardVersion")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.loadApp() }
+            }
+        } else if choice == .alertSecondButtonReturn {
+            showQwenProviderForm()
+        } else {
+            UserDefaults.standard.set(providerWizardVersion, forKey: "DSMProviderWizardVersion")
+        }
+    }
+
+    func showQwenProviderForm() {
+        let endpointField = NSTextField(string: qwenEndpoint)
+        let modelField = NSTextField(string: "qwen3.8-27b")
+        let keyField = NSSecureTextField(string: "")
+        endpointField.placeholderString = "https://…/v1"
+        modelField.placeholderString = "千问模型名称"
+        keyField.placeholderString = "API 密钥（只保存到钥匙串）"
+
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.spacing = 7
+        stack.alignment = .leading
+        for (title, field) in [("兼容接口", endpointField), ("模型名称", modelField), ("API 密钥", keyField)] {
+            let label = NSTextField(labelWithString: title)
+            label.font = .systemFont(ofSize: 11, weight: .medium)
+            field.frame.size.width = 390
+            stack.addArrangedSubview(label)
+            stack.addArrangedSubview(field)
+        }
+        stack.frame = NSRect(x: 0, y: 0, width: 390, height: 154)
+
+        let alert = NSAlert()
+        alert.messageText = "设置本地千问模型"
+        alert.informativeText = "接口预设为你提供的地址。请确认模型名称，并输入该服务的密钥。图片输入会随最新 DSH 内核启用。"
+        alert.accessoryView = stack
+        alert.addButton(withTitle: "保存并使用")
+        alert.addButton(withTitle: "取消")
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let endpoint = endpointField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let model = modelField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let key = keyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: endpoint), url.scheme == "https", !model.isEmpty, !key.isEmpty else {
+            showAlert(title: "请检查模型设置", message: "接口必须是 HTTPS 地址，模型名称和 API 密钥不能为空。")
+            showQwenProviderForm()
+            return
+        }
+        guard setKeychainPassword(key) else {
+            showAlert(title: "无法保存密钥", message: "macOS 钥匙串拒绝了写入，请检查系统权限。")
+            return
+        }
+        if applyProviderConfig(provider: "qwen", endpoint: endpoint, model: model) {
+            UserDefaults.standard.set(providerWizardVersion, forKey: "DSMProviderWizardVersion")
+            requestBackendRecovery()
+            showAlert(title: "已切换到本地千问", message: "模型 \(model) 已启用；密钥只保存在 macOS 钥匙串中。")
+        }
+    }
+
+    func applyInterfaceTheme(_ mode: String) {
+        interfaceTheme = mode == "official" ? "official" : "cute"
+        UserDefaults.standard.set(interfaceTheme, forKey: "DSMInterfaceTheme")
+        let script = "window.__dsmApplyTheme&&window.__dsmApplyTheme('\(interfaceTheme)')"
+        webView?.evaluateJavaScript(script, completionHandler: nil)
+        refreshThemeMenuState()
+    }
+
+    func refreshThemeMenuState() {
+        themeOfficialMenuItems.forEach { $0.state = interfaceTheme == "official" ? .on : .off }
+        themeCuteMenuItems.forEach { $0.state = interfaceTheme == "cute" ? .on : .off }
+    }
+
+    @objc func useOfficialTheme() { applyInterfaceTheme("official") }
+    @objc func useCuteTheme() { applyInterfaceTheme("cute") }
+
     func checkBackend(shouldRecover: Bool) {
         guard let url = URL(string: APP_URL) else { return }
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 1.5)
@@ -742,6 +903,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let bundledBin = Bundle.main.resourceURL?.appendingPathComponent("Runtime/bin").path ?? ""
         environment["PATH"] = bundledBin + ":/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:" + (environment["PATH"] ?? "")
         environment["NO_COLOR"] = "1"
+        if let qwenKey = keychainPassword(), !qwenKey.isEmpty {
+            environment["QWEN_API_KEY"] = qwenKey
+        }
         process.environment = environment
         process.currentDirectoryURL = fileManager.homeDirectoryForCurrentUser
         if let backendLog = prepareBackendLog() {
@@ -808,6 +972,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func requestBackendRecovery() {
         if let process = backendProcess, process.isRunning {
+            showOffline()
             process.terminate()
             backendProcess = nil
             publishServiceStatus("starting")
@@ -1185,6 +1350,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         restart.target = self
         menu.addItem(restart)
 
+        let theme = NSMenuItem(title: "界面主题", action: nil, keyEquivalent: "")
+        let themeMenu = NSMenu(title: "界面主题")
+        let officialTheme = NSMenuItem(title: "DeepSeek 官方样式", action: #selector(useOfficialTheme), keyEquivalent: "")
+        let cuteTheme = NSMenuItem(title: "正太主题", action: #selector(useCuteTheme), keyEquivalent: "")
+        for entry in [officialTheme, cuteTheme] { entry.target = self }
+        themeOfficialMenuItems.append(officialTheme)
+        themeCuteMenuItems.append(cuteTheme)
+        themeMenu.addItem(officialTheme)
+        themeMenu.addItem(cuteTheme)
+        theme.submenu = themeMenu
+        menu.addItem(theme)
+
+        let provider = NSMenuItem(title: "模型服务设置…", action: #selector(showModelProviderWizard), keyEquivalent: "")
+        provider.target = self
+        menu.addItem(provider)
+
         let focus = NSMenuItem(title: "专注计时", action: nil, keyEquivalent: "")
         let focusMenu = NSMenu(title: "专注计时")
         let focus25 = NSMenuItem(title: "专注 25 分钟", action: #selector(startFocus25), keyEquivalent: "")
@@ -1226,6 +1407,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
         item.menu = menu
         statusItem = item
+        refreshThemeMenuState()
     }
 
     @objc func restartBackendFromMenu() {
@@ -1303,6 +1485,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         appMenu.addItem(withTitle: "隐藏 " + APP_NAME, action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(withTitle: "显示/隐藏桌面宠物", action: #selector(AppDelegate.toggleDesktopPet), keyEquivalent: "p")
         appMenu.addItem(withTitle: "测试任务完成提醒", action: #selector(AppDelegate.testPetCompletion), keyEquivalent: "")
+        let themeItem = NSMenuItem(title: "界面主题", action: nil, keyEquivalent: "")
+        let themeMenu = NSMenu(title: "界面主题")
+        let officialTheme = NSMenuItem(title: "DeepSeek 官方样式", action: #selector(AppDelegate.useOfficialTheme), keyEquivalent: "")
+        let cuteTheme = NSMenuItem(title: "正太主题", action: #selector(AppDelegate.useCuteTheme), keyEquivalent: "")
+        for entry in [officialTheme, cuteTheme] { entry.target = self }
+        themeOfficialMenuItems.append(officialTheme)
+        themeCuteMenuItems.append(cuteTheme)
+        themeMenu.addItem(officialTheme)
+        themeMenu.addItem(cuteTheme)
+        themeItem.submenu = themeMenu
+        appMenu.addItem(themeItem)
+        let providerItem = appMenu.addItem(withTitle: "模型服务设置…", action: #selector(AppDelegate.showModelProviderWizard), keyEquivalent: "")
+        providerItem.target = self
         appMenu.addItem(.separator())
         let updateItem = appMenu.addItem(withTitle: "检查 GitHub 更新", action: #selector(AppDelegate.checkForUpdatesFromMenu), keyEquivalent: "")
         updateItem.target = self
@@ -1342,6 +1537,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         NSApp.windowsMenu = windowMenu
 
         NSApp.mainMenu = mainMenu
+        refreshThemeMenuState()
     }
 
     @objc func reloadPage() {

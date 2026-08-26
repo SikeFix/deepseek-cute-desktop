@@ -3,6 +3,8 @@
   window.__dsmInteractions = true;
 
   const root = document.documentElement;
+  let themeMode = window.__dsmThemeMode === 'official' ? 'official' : 'cute';
+  root.dataset.dsmTheme = themeMode;
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   let pointerFrame = 0;
   let scrollTimer = 0;
@@ -71,6 +73,13 @@
   servicePill.title = '本地 DeepSeek 服务状态';
   document.body.appendChild(servicePill);
 
+  window.__dsmSetThemeMode = (mode) => {
+    themeMode = mode === 'official' ? 'official' : 'cute';
+    root.dataset.dsmTheme = themeMode;
+    servicePill.style.display = themeMode === 'official' ? 'none' : '';
+  };
+  window.__dsmSetThemeMode(themeMode);
+
   window.__dsmSetServiceStatus = (status) => {
     const labels = { online: '已连接', starting: '正在启动', offline: '服务异常' };
     servicePill.dataset.state = status;
@@ -83,6 +92,7 @@
   });
 
   const decorateButtons = (scope = document) => {
+    if (themeMode === 'official') return;
     scope.querySelectorAll?.('button:not([data-dsm-interactive])').forEach((button) => {
       button.dataset.dsmInteractive = '';
     });
@@ -96,7 +106,7 @@
       root.style.setProperty('--dsm-pointer-x', `${x}%`);
       root.style.setProperty('--dsm-pointer-y', `${y}%`);
 
-      if (reducedMotion.matches) return;
+      if (reducedMotion.matches || themeMode === 'official') return;
       const mascot = event.target.closest?.('[class$="_fishHitbox"], [data-slot="sidebar"] button[class*="_brand"]');
       if (!mascot) return;
       const rect = mascot.getBoundingClientRect();
@@ -131,7 +141,7 @@
         pop.addEventListener('animationend', () => pop.remove(), { once: true });
       }
     }
-    if (reducedMotion.matches) return;
+    if (reducedMotion.matches || themeMode === 'official') return;
     const rect = button.getBoundingClientRect();
     const ripple = document.createElement('span');
     ripple.className = 'dsm-ripple';

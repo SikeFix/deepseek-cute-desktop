@@ -5,6 +5,7 @@ const {
   ipcMain,
   Menu,
   Notification,
+  safeStorage,
   Tray,
   nativeImage,
   screen,
@@ -12,7 +13,7 @@ const {
 } = require('electron');
 const log = require('electron-log/main');
 const { autoUpdater } = require('electron-updater');
-const { spawn } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
@@ -25,6 +26,7 @@ const STARTED_AT = Date.now();
 let mainWindow;
 let petWindow;
 let tray;
+let providerWindow;
 let backendProcess;
 let backendStarting = false;
 let backendLogStream;
@@ -40,9 +42,67 @@ let petState = { mood: 'thinking', text: '正在启动服务…', color: '#f5dc2
 let dragState;
 let serviceStatus = { state: 'starting', message: '正在准备本地服务…' };
 let updateStatus = { state: 'idle', message: `当前版本 ${app.getVersion()}`, percent: 0 };
+let insertedThemeCSS;
+let themeMode = 'cute';
+const PROVIDER_WIZARD_VERSION = '2026-08-v4-vision-qwen-1';
+const QWEN_ENDPOINT = 'https://ai-xtu.yangrucheng.eu.org/v1';
 
 const resourcePath = (...parts) => path.join(app.isPackaged ? process.resourcesPath : __dirname, ...parts);
 const petPositionPath = () => path.join(app.getPath('userData'), 'pet-position.json');
+const preferencesPath = () => path.join(app.getPath('userData'), 'preferences.json');
+const providerSecretPath = () => path.join(app.getPath('userData'), 'provider-secret.json');
+
+function readJSON(filePath, fallback = {}) {
+  try { return JSON.parse(fs.readFileSync(filePath, 'utf8')); } catch (_) { return fallback; }
+}
+
+function writeJSON(filePath, value) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, JSON.stringify(value, null, 2), { mode: 0o600 });
+}
+
+function preferences() {
+  return readJSON(preferencesPath(), {});
+}
+
+function updatePreferences(patch) {
+  writeJSON(preferencesPath(), { ...preferences(), ...patch });
+}
+
+function qwenAPIKey() {
+  try {
+    const payload = readJSON(providerSecretPath(), {});
+    if (!payload.qwen || !safeStorage.isEncryptionAvailable()) return '';
+    return safeStorage.decryptString(Buffer.from(payload.qwen, 'base64'));
+  } catch (error) {
+    log.warn('[provider] unable to decrypt Qwen credential', error.message);
+    return '';
+  }
+}
+
+function saveQwenAPIKey(apiKey) {
+  if (!safeStorage.isEncryptionAvailable()) throw new Error('Windows 安全存储当前不可用');
+  const encrypted = safeStorage.encryptString(apiKey).toString('base64');
+  writeJSON(providerSecretPath(), { qwen: encrypted });
+}
+
+function runProviderConfig({ provider, endpoint, model }) {
+  const nodeExe = resourcePath('runtime', 'node', 'node.exe');
+  const script = resourcePath('provider', 'provider-config.mjs');
+  const modules = resourcePath('runtime', 'dsh', 'node_modules');
+  const args = [script, '--modules', modules, '--provider', provider];
+  if (endpoint) args.push('--baseURL', endpoint);
+  if (model) args.push('--model', model);
+  const result = spawnSync(nodeExe, args, {
+    cwd: app.getPath('home'),
+    windowsHide: true,
+    encoding: 'utf8',
+    timeout: 15000
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error((result.stderr || '模型配置写入失败').trim());
+  log.info(`[provider] configured provider=${provider}`);
+}
 
 log.initialize();
 log.transports.file.level = 'info';
@@ -253,6 +313,7 @@ async function startBackend() {
       env: {
         ...process.env,
         NO_COLOR: '1',
+        ...(qwenAPIKey() ? { QWEN_API_KEY: qwenAPIKey() } : {}),
         PATH: `${path.dirname(nodeExe)};${process.env.PATH || ''}`
       },
       windowsHide: true,
@@ -319,14 +380,33 @@ function loadMainURL(url = APP_URL) {
   mainWindow.loadURL(safeURL.href).catch(() => showWaiting());
 }
 
-function injectTheme() {
+async function applyThemeMode(mode, persist = true) {
+  themeMode = mode === 'official' ? 'official' : 'cute';
+  if (persist) updatePreferences({ themeMode });
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (insertedThemeCSS) {
+    try { await mainWindow.webContents.removeInsertedCSS(insertedThemeCSS); } catch (_) {}
+    insertedThemeCSS = undefined;
+  }
+  if (themeMode === 'cute' && mainWindow.webContents.getURL().startsWith(APP_URL)) {
+    const css = fs.readFileSync(resourcePath('theme', 'theme.css'), 'utf8');
+    insertedThemeCSS = await mainWindow.webContents.insertCSS(css).catch(() => undefined);
+  }
+  mainWindow.webContents.executeJavaScript(
+    `window.__dsmThemeMode=${JSON.stringify(themeMode)};document.documentElement.dataset.dsmTheme=window.__dsmThemeMode;window.__dsmSetThemeMode&&window.__dsmSetThemeMode(window.__dsmThemeMode);window.__dsmWindowsThemeChanged&&window.__dsmWindowsThemeChanged(window.__dsmThemeMode)`
+  ).catch(() => {});
+  refreshTrayMenu();
+}
+
+async function injectTheme() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   const currentURL = mainWindow.webContents.getURL();
   if (!currentURL.startsWith(APP_URL)) return;
-  const css = fs.readFileSync(resourcePath('theme', 'theme.css'), 'utf8');
   const interactions = fs.readFileSync(resourcePath('theme', 'interactions.js'), 'utf8');
   const windowsChrome = fs.readFileSync(path.join(__dirname, 'window-inject.js'), 'utf8');
-  mainWindow.webContents.insertCSS(css).catch(() => {});
+  themeMode = preferences().themeMode === 'official' ? 'official' : 'cute';
+  await mainWindow.webContents.executeJavaScript(`window.__dsmThemeMode=${JSON.stringify(themeMode)}`).catch(() => {});
+  await applyThemeMode(themeMode, false);
   mainWindow.webContents.executeJavaScript(interactions).catch(() => {});
   mainWindow.webContents.executeJavaScript(windowsChrome).catch(() => {});
 }
@@ -456,19 +536,72 @@ function showCompletionNotification(title, duration, taskURL) {
   notice.show();
 }
 
-function createTray() {
-  const image = nativeImage.createFromPath(resourcePath('assets', 'icon.png')).resize({ width: 20, height: 20 });
-  tray = new Tray(image);
-  tray.setToolTip(APP_NAME);
+function showModelProviderWizard() {
+  if (providerWindow && !providerWindow.isDestroyed()) {
+    providerWindow.show();
+    providerWindow.focus();
+    return;
+  }
+  providerWindow = new BrowserWindow({
+    width: 560,
+    height: 610,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    parent: mainWindow,
+    modal: true,
+    show: false,
+    title: '模型服务设置',
+    backgroundColor: '#fff9ee',
+    icon: resourcePath('assets', 'icon.png'),
+    webPreferences: {
+      preload: path.join(__dirname, 'model-setup-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  });
+  providerWindow.removeMenu();
+  providerWindow.loadFile(path.join(__dirname, 'model-setup.html'), {
+    query: { endpoint: QWEN_ENDPOINT, model: 'qwen3.8-27b' }
+  });
+  providerWindow.once('ready-to-show', () => providerWindow?.show());
+  providerWindow.on('closed', () => { providerWindow = undefined; });
+}
+
+function restartBackendForProviderChange() {
+  publishServiceStatus('starting', '模型服务已更新，正在重启本地内核…');
+  showWaiting('模型服务已更新，正在安全重启本地 DeepSeek 内核…');
+  if (backendProcess && !backendProcess.killed) backendProcess.kill();
+  else startBackend();
+}
+
+function refreshTrayMenu() {
+  if (!tray) return;
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: '打开 DeepSeek', click: () => showMain() },
     { label: '显示/隐藏桌面宠物', click: () => petWindow?.isVisible() ? petWindow.hide() : petWindow.showInactive() },
     { label: '重试本地服务', click: () => startBackend() },
+    {
+      label: '界面主题',
+      submenu: [
+        { label: 'DeepSeek 官方样式', type: 'radio', checked: themeMode === 'official', click: () => applyThemeMode('official') },
+        { label: '正太主题', type: 'radio', checked: themeMode === 'cute', click: () => applyThemeMode('cute') }
+      ]
+    },
+    { label: '模型服务设置…', click: () => showModelProviderWizard() },
     { label: '检查应用更新', click: () => checkForUpdates(true) },
     { label: '打开诊断日志', click: () => shell.showItemInFolder(log.transports.file.getFile().path) },
     { type: 'separator' },
     { label: '退出', click: () => { quitting = true; app.quit(); } }
   ]));
+}
+
+function createTray() {
+  const image = nativeImage.createFromPath(resourcePath('assets', 'icon.png')).resize({ width: 20, height: 20 });
+  tray = new Tray(image);
+  tray.setToolTip(APP_NAME);
+  refreshTrayMenu();
   tray.on('double-click', () => showMain());
 }
 
@@ -486,6 +619,41 @@ ipcMain.on('dsm-service', (_event, command) => {
 
 ipcMain.on('dsm-update', () => checkForUpdates(true));
 ipcMain.handle('dsm-status', () => ({ service: serviceStatus, update: updateStatus }));
+ipcMain.handle('dsm-theme-get', () => themeMode);
+ipcMain.on('dsm-theme-set', (_event, mode) => applyThemeMode(mode));
+ipcMain.on('dsm-provider-open', () => showModelProviderWizard());
+ipcMain.handle('provider-save', (_event, payload = {}) => {
+  try {
+    let needsRestart = false;
+    if (payload.provider === 'official') {
+      runProviderConfig({ provider: 'official' });
+    } else if (payload.provider === 'qwen') {
+      const endpoint = String(payload.endpoint || '').trim();
+      const model = String(payload.model || '').trim();
+      const apiKey = String(payload.apiKey || '').trim();
+      const url = new URL(endpoint);
+      if (url.protocol !== 'https:') throw new Error('接口必须使用 HTTPS');
+      if (!model || !apiKey) throw new Error('模型名称和 API 密钥不能为空');
+      saveQwenAPIKey(apiKey);
+      runProviderConfig({ provider: 'qwen', endpoint, model });
+      needsRestart = true;
+    } else {
+      throw new Error('未知的模型服务');
+    }
+    updatePreferences({ providerWizardVersion: PROVIDER_WIZARD_VERSION });
+    if (needsRestart) restartBackendForProviderChange();
+    else setTimeout(() => loadMainURL(), 400);
+    providerWindow?.close();
+    return { ok: true };
+  } catch (error) {
+    log.error('[provider] save failed', error);
+    return { ok: false, error: error.message || '模型设置失败' };
+  }
+});
+ipcMain.on('provider-cancel', () => {
+  updatePreferences({ providerWizardVersion: PROVIDER_WIZARD_VERSION });
+  providerWindow?.close();
+});
 
 ipcMain.on('dsm-pet', (_event, payload = {}) => {
   if (payload.event === 'busy') {
@@ -548,12 +716,16 @@ else {
   app.on('second-instance', () => showMain());
   app.whenReady().then(() => {
     log.info(`[startup ${elapsed()}] app ready version=${app.getVersion()} packaged=${app.isPackaged}`);
+    themeMode = preferences().themeMode === 'official' ? 'official' : 'cute';
     createMainWindow();
     createPetWindow();
     createTray();
     startBackend();
     setupAutoUpdater();
     healthTimer = setInterval(() => checkHealth(true), 5000);
+    if (preferences().providerWizardVersion !== PROVIDER_WIZARD_VERSION) {
+      setTimeout(() => showModelProviderWizard(), 1400);
+    }
   });
 }
 

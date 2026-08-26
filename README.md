@@ -1,6 +1,6 @@
 # DeepSeek Cute Desktop
 
-下载即用的本地 DeepSeek 桌面端：一套完整的暖色正太主题、会互动的桌面宠物，以及任务完成提醒。macOS 和 Windows 都不需要用户额外安装 Node.js 或手动运行 `dsh web`。
+下载即用的本地 DeepSeek 桌面端：暖色正太主题（可一键切回官方样式）、会互动的桌面宠物、任务完成提醒，以及官方 DeepSeek / 本地千问双模型服务。macOS 和 Windows 都不需要用户额外安装 Node.js 或手动运行 `dsh web`。
 
 [下载最新版](https://github.com/SikeFix/deepseek-cute-desktop/releases/latest)
 
@@ -12,8 +12,14 @@
 
 | 系统 | 下载 | 要求 |
 | --- | --- | --- |
-| macOS Apple Silicon | [DeepSeek-M2-1.5.0.dmg](https://github.com/SikeFix/deepseek-cute-desktop/releases/latest/download/DeepSeek-M2-1.5.0.dmg) | macOS 13.5+，M1/M2/M3/M4 |
-| Windows x64 | [DeepSeek-Cute-Windows-x64-Setup-1.4.1.exe](https://github.com/SikeFix/deepseek-cute-desktop/releases/latest/download/DeepSeek-Cute-Windows-x64-Setup-1.4.1.exe) | Windows 10/11 x64 |
+| macOS Apple Silicon | [DeepSeek-M2-1.6.0.dmg](https://github.com/SikeFix/deepseek-cute-desktop/releases/latest/download/DeepSeek-M2-1.6.0.dmg) | macOS 13.5+，M1/M2/M3/M4 |
+| Windows x64 | [DeepSeek-Cute-Windows-x64-Setup-1.6.0.exe](https://github.com/SikeFix/deepseek-cute-desktop/releases/latest/download/DeepSeek-Cute-Windows-x64-Setup-1.6.0.exe) | Windows 10/11 x64 |
+
+## 1.6.0 新功能
+
+- 主题切换：标题栏一键切换「DeepSeek 官方样式 / 正太主题」，选择自动保存
+- 模型服务设置：官方 DeepSeek 或本地千问兼容接口（默认 qwen3.8-27b），API 密钥加密保存
+- 内核升级 0.1.1-rc.2：支持最新图片模型与图片附件/Files API 管线
 
 ## 主题体验
 
@@ -53,15 +59,15 @@
 ## 校验值
 
 ```text
-aa7d334c5030ac372e6d0232f12c7e7211bf1ab50b1b6d178cb89f71bcd249fa  DeepSeek-M2-1.5.0.dmg
-db73896515e4761caffc70348b9541dc762a20119f18eca3c40b0244efdc9459  DeepSeek-Cute-Windows-x64-Setup-1.4.1.exe
+5bda8fd31c2a1dc68a2234c30f1ca412a5c38880d7fbdaf0210c8ad9c93434e0  DeepSeek-M2-1.6.0.dmg
+689ccf1c337ce6df9ed9a766cd232a788b2c534ed5267175474d3976398dc343  DeepSeek-Cute-Windows-x64-Setup-1.6.0.exe
 ```
 
 ## 说明
 
 - 模型账号、登录状态和工作区数据仍由每台电脑分别管理，不会打包进安装文件。
-- macOS Apple Silicon 1.5.0 已在 M2 环境完成编译、签名、DMG 挂载、GitHub 更新解析、专注计时、内置服务启动与 HTTP 连通验证。
-- Windows 版已完成 x64 构建、PE 架构、七级 ICO、NSIS 更新元数据、差分 blockmap 及内置原生依赖检查；由于本次构建环境是 macOS，仍建议首次 Windows 用户在 Issues 反馈兼容性。
+- macOS Apple Silicon 1.6.0 已在 M2 环境完成编译、ad-hoc 签名、DMG 挂载与内置 0.1.1-rc.2 运行时验证。
+- Windows 1.6.0 已完成 electron-builder x64 构建、asar 打包清单核对、NSIS 更新元数据与差分 blockmap 校验；由于构建环境是 macOS，仍建议首次 Windows 用户在 Issues 反馈兼容性。
 - 项目不是 DeepSeek 官方产品，详情见 [NOTICE.md](NOTICE.md)。
 
 ## 源码

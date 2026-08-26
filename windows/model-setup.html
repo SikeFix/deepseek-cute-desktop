@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>模型服务设置</title>
+  <style>
+    :root { color-scheme: light; font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin:0; min-height:100vh; color:#30261f; background:radial-gradient(circle at 85% 5%,#ffe84d55,transparent 34%),linear-gradient(145deg,#fffaf0,#f3e8d4); }
+    main { padding:30px; }
+    h1 { margin:0 0 8px; font-size:25px; }
+    .lead { margin:0 0 22px; color:#6e5d50; line-height:1.55; }
+    .choices { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .choice { position:relative; padding:16px; border:2px solid #d7c8b6; border-radius:17px; background:#fffdf8cc; cursor:pointer; transition:.18s ease; }
+    .choice:has(input:checked) { border-color:#f36a50; box-shadow:0 7px 0 #f3dc21; transform:translateY(-2px); }
+    .choice input { position:absolute; opacity:0; }
+    .choice strong { display:block; margin-bottom:6px; font-size:16px; }
+    .choice span { color:#74665b; font-size:12px; line-height:1.45; }
+    .badge { display:inline-block!important; width:max-content; margin-top:9px; padding:4px 8px; border-radius:999px; color:#087c6d!important; background:#55d8c233; font-weight:700; }
+    #qwenFields { display:none; margin-top:18px; padding:16px; border-radius:16px; background:#fffdf8cc; border:1px solid #ddcdb9; }
+    body[data-provider="qwen"] #qwenFields { display:block; }
+    label.field { display:block; margin-bottom:12px; font-size:12px; font-weight:700; }
+    input[type="text"], input[type="password"] { display:block; width:100%; margin-top:6px; padding:10px 11px; border:1px solid #cdbbaa; border-radius:10px; background:white; color:#2d2824; font:13px ui-monospace,SFMono-Regular,Consolas,monospace; outline:none; }
+    input:focus { border-color:#f36a50; box-shadow:0 0 0 3px #f36a5022; }
+    .security { margin:0; color:#6f6259; font-size:11px; line-height:1.5; }
+    .error { min-height:20px; margin:12px 0 0; color:#bf342d; font-size:12px; font-weight:700; }
+    footer { display:flex; justify-content:flex-end; gap:10px; margin-top:16px; }
+    button { border:0; border-radius:11px; padding:10px 17px; font:700 13px inherit; cursor:pointer; }
+    .cancel { color:#574b43; background:#e8ddd0; }
+    .save { color:white; background:#f36a50; box-shadow:5px 5px 0 #f3dc21; }
+    button:disabled { opacity:.55; cursor:wait; }
+  </style>
+</head>
+<body data-provider="official">
+  <main>
+    <h1>选择默认模型服务</h1>
+    <p class="lead">新版内核支持 DeepSeek V4 图片理解，也可以连接你的本地千问兼容接口。之后可从托盘或标题栏再次修改。</p>
+    <section class="choices">
+      <label class="choice">
+        <input type="radio" name="provider" value="official" checked>
+        <strong>DeepSeek 官方 V4</strong>
+        <span>V4 Flash、V4 Pro 与 V4 Vision 图片模型，由 DeepSeek 设置页管理官方密钥。</span>
+        <span class="badge">推荐 · 最新图片能力</span>
+      </label>
+      <label class="choice">
+        <input type="radio" name="provider" value="qwen">
+        <strong>本地千问</strong>
+        <span>使用 OpenAI Responses 兼容接口。需要填写接口密钥与实际模型名称。</span>
+        <span class="badge">自定义兼容服务</span>
+      </label>
+    </section>
+    <section id="qwenFields">
+      <label class="field">兼容接口<input id="endpoint" type="text" spellcheck="false"></label>
+      <label class="field">模型名称<input id="model" type="text" spellcheck="false"></label>
+      <label class="field">API 密钥<input id="apiKey" type="password" autocomplete="off" placeholder="只保存到 Windows 安全存储"></label>
+      <p class="security">密钥使用 Windows DPAPI 加密，不写入 GitHub、DSH 设置文件或应用日志。图片输入按多模态模型启用；接口本身需支持该能力。</p>
+    </section>
+    <p id="error" class="error"></p>
+    <footer>
+      <button class="cancel" id="cancel">稍后设置</button>
+      <button class="save" id="save">保存并使用</button>
+    </footer>
+  </main>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const endpoint = document.querySelector('#endpoint');
+    const model = document.querySelector('#model');
+    const apiKey = document.querySelector('#apiKey');
+    const error = document.querySelector('#error');
+    const save = document.querySelector('#save');
+    endpoint.value = params.get('endpoint') || 'https://ai-xtu.yangrucheng.eu.org/v1';
+    model.value = params.get('model') || 'qwen3.8-27b';
+    document.querySelectorAll('input[name="provider"]').forEach((radio) => radio.addEventListener('change', () => {
+      document.body.dataset.provider = radio.checked ? radio.value : document.body.dataset.provider;
+      error.textContent = '';
+    }));
+    document.querySelector('#cancel').addEventListener('click', () => window.modelSetup.cancel());
+    save.addEventListener('click', async () => {
+      const provider = document.querySelector('input[name="provider"]:checked').value;
+      error.textContent = '';
+      if (provider === 'qwen' && (!endpoint.value.trim() || !model.value.trim() || !apiKey.value.trim())) {
+        error.textContent = '请填写接口、模型名称和 API 密钥。';
+        return;
+      }
+      save.disabled = true;
+      save.textContent = '正在保存…';
+      const result = await window.modelSetup.save({ provider, endpoint: endpoint.value.trim(), model: model.value.trim(), apiKey: apiKey.value });
+      if (!result?.ok) {
+        error.textContent = result?.error || '保存失败，请重试。';
+        save.disabled = false;
+        save.textContent = '保存并使用';
+      }
+    });
+  </script>
+</body>
+</html>
