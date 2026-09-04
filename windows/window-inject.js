@@ -172,12 +172,30 @@
       text-transform: uppercase; letter-spacing: .04em; font-weight: 700;
     }
 
-    /* ---------- 吉祥物头像(官方模式替换品牌/欢迎区形象) ---------- */
+    /* ---------- 吉祥物头像(品牌/欢迎区形象) ---------- */
     .dsm-brand-avatar {
       width: 26px; height: 26px; border-radius: 9px;
       box-shadow:
         inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-label-primary, #000000) 14%, transparent),
         0 2px 8px rgba(20, 18, 30, .10);
+    }
+    /* cute 主题品牌按钮内的吉祥物: 与原 ::before 规格一致 */
+    .dsm-brand-avatar-cute {
+      width: 43px; height: 43px; border-radius: 14px;
+      border: 2px solid color-mix(in srgb, var(--dsm-ink, #101010) 65%, transparent);
+      box-shadow: 2px 3px 0 var(--dsm-coral, #ff7a59);
+    }
+    /* 真实元素接管 ::before 后, 继承主题的悬浮倾斜与阴影动效 */
+    [data-slot="sidebar"] button[class*="_brand"] .dsm-brand-avatar-cute {
+      transform: perspective(420px) rotateX(var(--dsm-tilt-x, 0deg)) rotateY(var(--dsm-tilt-y, 0deg));
+      transform-origin: center;
+      transition: transform .18s ease, box-shadow .18s ease;
+    }
+    [data-slot="sidebar"] button[class*="_brand"]:hover .dsm-brand-avatar-cute {
+      box-shadow: 4px 6px 0 var(--dsm-coral, #ff7a59), 0 12px 30px rgba(33, 26, 25, .24);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      [data-slot="sidebar"] button[class*="_brand"] .dsm-brand-avatar-cute { transform: none !important; transition: none; }
     }
     .dsm-hero-avatar {
       width: 64px; height: 64px; border-radius: 22px;
@@ -327,8 +345,18 @@
   };
   applyMascot(mascotURL);
 
-  // 官方模式: 品牌行与欢迎区鲸鱼替换为吉祥物头像(cute 主题由主题 CSS 自带形象)
+  // 品牌行吉祥物一律用真实 DOM 元素(dsh 侧边栏各状态下 ::before 可能不渲染);
+  // 欢迎区鲸鱼仅官方模式替换。
   const isOfficial = () => document.documentElement.dataset.dsmTheme === 'official';
+
+  // cute/自定义主题(均源自 cute 模板)的品牌按钮自带 ::before 吉祥物,
+  // 真实元素接管后关掉伪元素, 避免重影
+  if (!document.getElementById('dsmBrandBeforeKill')) {
+    const kill = document.createElement('style');
+    kill.id = 'dsmBrandBeforeKill';
+    kill.textContent = '[data-slot="sidebar"] button[class*="_brand"]::before{content:none !important}';
+    document.head.appendChild(kill);
+  }
 
   const decorateBrand = (button) => {
     if (button.dataset.dsmBrandDone) return;
@@ -339,7 +367,7 @@
     if (mark) mark.style.display = 'none';
     if (name) name.style.display = 'none';
     const av = document.createElement('span');
-    av.className = 'dsm-avatar dsm-brand-avatar';
+    av.className = 'dsm-avatar dsm-brand-avatar' + (isOfficial() ? '' : ' dsm-brand-avatar-cute');
     (identity || (mark && mark.parentElement) || button)
       .insertBefore(av, identity ? identity.firstChild : (mark || button.firstChild));
     av.style.backgroundImage = 'url("' + mascotURL + '")';
@@ -359,8 +387,8 @@
   };
 
   const scanChrome = (root) => {
-    if (!isOfficial()) return;
     root.querySelectorAll('button[class*="_brand"]').forEach(decorateBrand);
+    if (!isOfficial()) return;
     root.querySelectorAll('[class*="_headline"]').forEach(decorateHero);
   };
   scanChrome(document);

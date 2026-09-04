@@ -1,8 +1,8 @@
 /* ============================================================
    DSM 应用外观层 (与主题无关, 官方/内置/自定义主题均生效)
-   - 52px 顶部悬浮栏: 磨砂玻璃 + 品牌色细光线, 状态胶囊居右
+   - 52px 顶部悬浮栏: 上实下透渐隐, 左吉祥物 + 右状态胶囊
    - 页面顶部留白, 壁纸/背景继续铺到窗口最顶端
-   - 官方模式下品牌行与欢迎区鲸鱼替换为吉祥物头像
+   - 品牌行吉祥物用真实 DOM 元素(兼容 dsh 侧边栏各显示状态)
    ============================================================ */
 
 :root {
@@ -20,7 +20,9 @@ html [class$="_frame"] {
   padding-top: var(--dsm-chrome-h) !important;
 }
 
-/* ---------- 顶部悬浮栏 ---------- */
+/* ---------- 顶部悬浮栏 ----------
+   完全透明: 壁纸/主题背景继续铺到窗口最顶端, 不产生任何硬色带;
+   左侧吉祥物品牌区 + 右侧状态胶囊各自带底, 直接悬浮。 */
 #dsmTopbar {
   position: fixed;
   top: 0;
@@ -30,28 +32,27 @@ html [class$="_frame"] {
   z-index: 2147482600;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  padding: 0 16px;
+  justify-content: space-between;
+  padding: 0 16px 0 14px;
   pointer-events: none;
-  background: color-mix(in srgb, var(--dsw-alias-bg-base, #ffffff) 64%, transparent);
-  -webkit-backdrop-filter: blur(24px) saturate(175%);
-  backdrop-filter: blur(24px) saturate(175%);
-  border-bottom: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary, #101010) 9%, transparent);
 }
 
-#dsmTopbar::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1px;
-  height: 1px;
-  background: linear-gradient(90deg,
-    transparent 3%,
-    color-mix(in srgb, var(--dsw-alias-brand-primary, #4c8dff) 30%, transparent) 50%,
-    transparent 97%);
-  opacity: .85;
+/* ---------- 顶栏品牌区(左) ---------- */
+#dsmTopbarBrand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
   pointer-events: none;
+  user-select: none;
+}
+
+#dsmTopAvatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: center / cover no-repeat;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary, #101010) 13%, transparent);
+  box-shadow: 0 2px 6px rgba(24, 20, 32, .12);
 }
 
 /* ---------- 状态胶囊 ---------- */
@@ -64,14 +65,14 @@ html [class$="_frame"] {
   padding: 0 12px;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary, #101010) 13%, transparent);
-  background: color-mix(in srgb, var(--dsw-alias-bg-layer-2, #f4f4f6) 80%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-2, #f4f4f6) 94%, transparent);
   -webkit-backdrop-filter: blur(12px) saturate(150%);
   backdrop-filter: blur(12px) saturate(150%);
   color: var(--dsw-alias-label-primary, #101010);
   font: 600 12px/1 -apple-system, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
   letter-spacing: .02em;
   cursor: default;
-  box-shadow: 0 4px 14px rgba(24, 20, 32, .10);
+  box-shadow: 0 4px 14px rgba(24, 20, 32, .12);
   transition: background-color .25s ease, border-color .25s ease, box-shadow .25s ease;
 }
 
@@ -135,6 +136,32 @@ button[class$="_trigger"] span[class$="_triggerLabel"] {
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-label-primary, #000000) 14%, transparent),
     0 2px 8px rgba(20, 18, 30, .10);
+}
+
+/* cute/自定义主题品牌按钮内的吉祥物: 与原 ::before 规格一致 */
+.dsm-brand-avatar-cute {
+  width: 43px;
+  height: 43px;
+  border-radius: 14px;
+  border: 2px solid color-mix(in srgb, var(--dsm-ink, #101010) 65%, transparent);
+  box-shadow: 2px 3px 0 var(--dsm-coral, #ff7a59);
+}
+
+/* 真实元素接管 ::before 后, 继承主题里的悬浮倾斜与阴影动效
+   (tilt 变量由 interactions.js 设在品牌按钮上, 后代继承) */
+[data-slot="sidebar"] button[class*="_brand"] .dsm-brand-avatar-cute {
+  transform: perspective(420px) rotateX(var(--dsm-tilt-x, 0deg)) rotateY(var(--dsm-tilt-y, 0deg));
+  transform-origin: center;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+[data-slot="sidebar"] button[class*="_brand"]:hover .dsm-brand-avatar-cute {
+  box-shadow: 4px 6px 0 var(--dsm-coral, #ff7a59), 0 12px 30px rgba(33, 26, 25, .24);
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="sidebar"] button[class*="_brand"] .dsm-brand-avatar-cute {
+    transform: none !important;
+    transition: none;
+  }
 }
 
 .dsm-hero-avatar {

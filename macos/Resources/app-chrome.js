@@ -17,11 +17,18 @@
   // ---------- 顶部悬浮栏 ----------
   const bar = document.createElement("div");
   bar.id = "dsmTopbar";
+  // 左侧品牌区: 吉祥物常驻顶栏, 不依赖 dsh 侧边栏的显示状态
+  const brand = document.createElement("div");
+  brand.id = "dsmTopbarBrand";
+  const topAv = document.createElement("span");
+  topAv.id = "dsmTopAvatar";
+  brand.appendChild(topAv);
   const status = document.createElement("button");
   status.type = "button";
   status.id = "dsmTopStatus";
   status.dataset.state = "starting";
   status.innerHTML = '<span class="dsm-top-dot"></span><span class="dsm-top-label">正在启动</span>';
+  bar.appendChild(brand);
   bar.appendChild(status);
   document.body.appendChild(bar);
 
@@ -37,11 +44,25 @@
     postNative("dsmService", topState === "online" ? "check" : "recover");
   });
 
-  // ---------- 吉祥物替换(仅官方样式; cute 主题用 CSS 变量自带) ----------
+  // ---------- 吉祥物替换 ----------
+  // dsh 侧边栏在不同状态下会隐藏品牌按钮(或 ::before 伪元素不渲染),
+  // 所以品牌区吉祥物一律用真实 DOM 元素, cute/官方模式都装饰;
+  // 顶栏左侧吉祥物则永远可见, 双保险。
   const isCute = () => document.documentElement.dataset.dsmTheme === "cute";
+  const isOfficial = () => document.documentElement.dataset.dsmTheme === "official";
+
+  // cute/自定义主题(均源自 cute 模板)的品牌按钮自带 ::before 吉祥物,
+  // 真实元素接管后关掉伪元素, 避免重影
+  if (!document.getElementById("dsmBrandBeforeKill")) {
+    const kill = document.createElement("style");
+    kill.id = "dsmBrandBeforeKill";
+    kill.textContent = '[data-slot="sidebar"] button[class*="_brand"]::before{content:none !important}';
+    document.head.appendChild(kill);
+  }
 
   const applyMascot = (url) => {
     mascotURL = url || DEFAULT_MASCOT;
+    topAv.style.backgroundImage = 'url("' + mascotURL + '")';
     document.querySelectorAll(".dsm-avatar").forEach((el) => {
       el.classList.toggle("dsm-has-mascot", Boolean(url));
       el.style.backgroundImage = 'url("' + mascotURL + '")';
@@ -57,7 +78,7 @@
     if (mark) mark.style.display = "none";
     if (name) name.style.display = "none";
     const av = document.createElement("span");
-    av.className = "dsm-avatar dsm-brand-avatar";
+    av.className = "dsm-avatar dsm-brand-avatar" + (isOfficial() ? "" : " dsm-brand-avatar-cute");
     (identity || (mark && mark.parentElement) || button).insertBefore(av, identity ? identity.firstChild : (mark || button.firstChild));
     applyMascot(mascotURL);
   };
@@ -76,9 +97,8 @@
   };
 
   const scan = (root) => {
-    if (isCute()) return;
     root.querySelectorAll('button[class*="_brand"]').forEach(decorateBrand);
-    root.querySelectorAll('[class*="_headline"]').forEach(decorateHero);
+    if (!isCute()) root.querySelectorAll('[class*="_headline"]').forEach(decorateHero);
   };
   scan(document);
 
@@ -101,13 +121,15 @@
   });
   mo.observe(document.documentElement, { childList: true, subtree: true });
 
-  // 主题切换时重建: cute 主题自带吉祥物样式, 官方模式由本层接管
+  // 主题切换时重建: 品牌吉祥物两种模式都由本层接管
   window.__dsmChromeRefresh = () => {
     document.querySelectorAll(".dsm-avatar").forEach((el) => el.remove());
     document.querySelectorAll("[data-dsm-brand-done]").forEach((el) => delete el.dataset.dsmBrandDone);
     document.querySelectorAll("[data-dsm-hero-done]").forEach((el) => delete el.dataset.dsmHeroDone);
-    if (!isCute()) scan(document);
+    scan(document);
+    applyMascot(mascotURL);
   };
+  applyMascot(mascotURL);
 
   // 包装主题应用函数, 支持第三参数 mascot(dataURL)
   const origApply = window.__dsmApplyTheme;
