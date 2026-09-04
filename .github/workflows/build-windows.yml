@@ -34,35 +34,34 @@ jobs:
         working-directory: windows
         run: npx electron-builder --win nsis --x64 --publish never
 
-      # 打包后自检: 解开安装包装载, 断言 dsh 启动链上的关键文件都在。
-      # 历史上 after-pack 按目录名误删过 @standard-schema/spec 与
-      # yaml/dist/doc, 导致 Windows 版后端启动即 MODULE_NOT_FOUND
-      # 崩溃循环(用户侧表现为"无法正常使用")。这道闸门保证同类
-      # 回归在 CI 就红, 而不是发到 Release 之后才发现。
+      # 打包后自检: 直接断言 win-unpacked(NSIS 压缩前的原始目录,
+      # afterPack 钩子作用于此, 与安装包装载逐文件一致)中 dsh 启动
+      # 链上的关键文件都在。历史上 after-pack 按目录名误删过
+      # @standard-schema/spec 与 yaml/dist/doc, 导致 Windows 版后端
+      # 启动即 MODULE_NOT_FOUND 崩溃循环(用户侧"无法正常使用")。
+      # 这道闸门保证同类回归在 CI 就红, 而不是发到 Release 才发现。
       - name: Verify installer payload
+        working-directory: windows
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $7z = 'C:\Program Files\7-Zip\7z.exe'
-          $exe = (Get-ChildItem 'windows\dist\*.exe' | Select-Object -First 1).FullName
-          $stage = Join-Path $env:RUNNER_TEMP 'nsis-verify'
-          & $7z x -y -o$stage $exe | Out-Null
-          $payload = (Get-ChildItem $stage -Recurse -Filter 'app-64.7z' | Select-Object -First 1).FullName
-          $appDir = Join-Path $env:RUNNER_TEMP 'nsis-verify-app'
-          & $7z x -y -o$appDir $payload | Out-Null
-          $nm = 'resources\runtime\dsh\node_modules'
+          $appDir = 'dist\win-unpacked'
+          if (-not (Test-Path (Join-Path $appDir 'resources'))) { throw "win-unpacked 结构异常: 缺少 resources" }
+          $nm = Join-Path $appDir 'resources\runtime\dsh\node_modules'
           $required = @(
-            'resources\runtime\node\node.exe',
-            "$nm\@deepseek-ai\dsh\lib\bin.js",
-            "$nm\@standard-schema\spec\package.json",
-            "$nm\yaml\dist\doc\Document.js",
-            "$nm\yaml\dist\index.js"
+            (Join-Path $appDir 'resources\runtime\node\node.exe'),
+            (Join-Path $nm '@deepseek-ai\dsh\lib\bin.js'),
+            (Join-Path $nm '@standard-schema\spec\package.json'),
+            (Join-Path $nm 'yaml\dist\doc\Document.js'),
+            (Join-Path $nm 'yaml\dist\index.js')
           )
-          foreach ($rel in $required) {
-            if (-not (Test-Path (Join-Path $appDir $rel))) {
-              throw "安装包缺少关键运行时文件: $rel (疑似 after-pack 误删)"
+          foreach ($full in $required) {
+            if (-not (Test-Path $full)) {
+              Write-Host "node_modules 顶层(前 40 项):"
+              Get-ChildItem $nm -ErrorAction SilentlyContinue | Select-Object -First 40 | ForEach-Object { Write-Host "  $($_.Name)" }
+              throw "安装包缺少关键运行时文件: $full (疑似 after-pack 误删)"
             }
-            Write-Host "OK: $rel"
+            Write-Host "OK: $full"
           }
 
       - name: Update release assets (clobber)
