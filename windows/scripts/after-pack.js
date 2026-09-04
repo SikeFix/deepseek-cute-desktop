@@ -44,13 +44,20 @@ function removeDebugSymbols(directory) {
 
 let removedBytes = 0;
 
+function isNpmPackage(directory) {
+  // 目录名撞上 PRUNE_DIR_NAMES 但内部有 package.json 的是真实 npm 包
+  // (例如 @standard-schema/spec), 绝不能删 —— 删了 dsh 启动直接
+  // MODULE_NOT_FOUND 崩溃循环。
+  return fs.existsSync(path.join(directory, 'package.json'));
+}
+
 function pruneTree(root) {
   let entries = [];
   try { entries = fs.readdirSync(root, { withFileTypes: true }); } catch (_) { return; }
   for (const entry of entries) {
     const full = path.join(root, entry.name);
     if (entry.isDirectory()) {
-      if (PRUNE_DIR_NAMES.has(entry.name)) {
+      if (PRUNE_DIR_NAMES.has(entry.name) && !isNpmPackage(full)) {
         removedBytes += dirSize(full);
         removeIfPresent(full);
         continue;
