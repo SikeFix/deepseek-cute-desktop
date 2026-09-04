@@ -24,6 +24,16 @@ Copy-Item (Join-Path $NodeSource "node.exe") (Join-Path $RuntimeDir "node/node.e
 Copy-Item (Join-Path $NodeSource "LICENSE") (Join-Path $RuntimeDir "licenses/Node-LICENSE.txt") -Force
 
 Push-Location $RuntimeDir
+# 关键: runtime/ 下必须有 package.json 锚定 npm 项目根。
+# 否则 npm 会向上找到 windows/package.json, 把运行时包装进 windows/node_modules,
+# 导致 runtime/node_modules 缺 dsh(包仍显示安装成功, 极具迷惑性)。
+@'
+{
+  "name": "deepseek-cute-runtime",
+  "private": true,
+  "version": "1.0.0"
+}
+'@ | Set-Content -Path (Join-Path $RuntimeDir "package.json") -Encoding utf8
 $HarnessPackages = @(
     "@deepseek-ai/dsh@0.1.1-rc.2",
     "@deepseek-ai/cordis-plugin-group@1.0.1",
@@ -49,7 +59,7 @@ $HarnessPackages = @(
 # 注意: 不要加 --os/--cpu 过滤参数 —— 部分 npm 版本会把带平台过滤的
 # 根包规格静默跳过, 导致 dsh 缺失。非 Windows 平台包(darwin/linux 的
 # sharp/@img/esbuild 预编译)由 after-pack.js 在打包阶段剔除。
-npm install --omit=dev --ignore-scripts --legacy-peer-deps $HarnessPackages
+npm install --no-audit --no-fund --omit=dev --ignore-scripts --legacy-peer-deps $HarnessPackages
 Pop-Location
 
 # 安装完整性校验: 缺关键文件立即失败, 避免打出缺运行时的包
