@@ -1,6 +1,6 @@
 {
   "name": "deepseek-cute-desktop-windows",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "DeepSeek Harness themed Windows desktop app with a task-aware desktop pet",
   "main": "main.js",
   "author": "sikefix",
