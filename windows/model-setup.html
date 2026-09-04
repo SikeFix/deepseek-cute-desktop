@@ -24,6 +24,9 @@
     input[type="text"], input[type="password"] { display:block; width:100%; margin-top:6px; padding:10px 11px; border:1px solid #cdbbaa; border-radius:10px; background:white; color:#2d2824; font:13px ui-monospace,SFMono-Regular,Consolas,monospace; outline:none; }
     input:focus { border-color:#f36a50; box-shadow:0 0 0 3px #f36a5022; }
     .security { margin:0; color:#6f6259; font-size:11px; line-height:1.5; }
+    .invite { margin:12px 0 0; color:#6f6259; font-size:12px; }
+    .invite-btn { border:0; border-radius:8px; padding:5px 11px; margin-left:6px; background:#55d8c233; color:#087c6d; font:700 12px inherit; cursor:pointer; }
+    .invite-btn:hover { background:#55d8c255; }
     .error { min-height:20px; margin:12px 0 0; color:#bf342d; font-size:12px; font-weight:700; }
     footer { display:flex; justify-content:flex-end; gap:10px; margin-top:16px; }
     button { border:0; border-radius:11px; padding:10px 17px; font:700 13px inherit; cursor:pointer; }
@@ -55,6 +58,7 @@
       <label class="field">模型名称<input id="model" type="text" spellcheck="false"></label>
       <label class="field">API 密钥<input id="apiKey" type="password" autocomplete="off" placeholder="只保存到 Windows 安全存储"></label>
       <p class="security">密钥使用 Windows DPAPI 加密，不写入 GitHub、DSH 设置文件或应用日志。图片输入按多模态模型启用；接口本身需支持该能力。</p>
+      <p class="invite">还没有 API 密钥？<button type="button" id="inviteBtn">前往 ssnh.top 注册登录获取</button></p>
     </section>
     <p id="error" class="error"></p>
     <footer>
@@ -69,13 +73,14 @@
     const apiKey = document.querySelector('#apiKey');
     const error = document.querySelector('#error');
     const save = document.querySelector('#save');
-    endpoint.value = params.get('endpoint') || 'https://ai-xtu.yangrucheng.eu.org/v1';
+    endpoint.value = params.get('endpoint') || 'https://www.ssnh.top/v1';
     model.value = params.get('model') || 'qwen3.8-27b';
     document.querySelectorAll('input[name="provider"]').forEach((radio) => radio.addEventListener('change', () => {
       document.body.dataset.provider = radio.checked ? radio.value : document.body.dataset.provider;
       error.textContent = '';
     }));
     document.querySelector('#cancel').addEventListener('click', () => window.modelSetup.cancel());
+    document.querySelector('#inviteBtn').addEventListener('click', () => window.modelSetup.openWebsite());
     save.addEventListener('click', async () => {
       const provider = document.querySelector('input[name="provider"]:checked').value;
       error.textContent = '';

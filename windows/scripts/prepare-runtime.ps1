@@ -46,7 +46,10 @@ $HarnessPackages = @(
     "@deepseek-ai/dsh-timeout@0.1.1-rc.2",
     "@deepseek-ai/dsh-workflow@0.1.1-rc.2"
 )
-npm install --omit=dev --ignore-scripts --legacy-peer-deps $HarnessPackages
+# --os=win32 --cpu=x64: 只安装 Windows x64 平台的原生预编译依赖
+# (sharp/@img、esbuild 等 optionalDependencies), 避免拉下 darwin/linux/arm64
+# 的全部平台包 —— 这是运行时目录体积的最大单一来源。
+npm install --omit=dev --ignore-scripts --legacy-peer-deps --os=win32 --cpu=x64 $HarnessPackages
 Pop-Location
 Copy-Item (Join-Path $RuntimeDir "node_modules/@deepseek-ai/dsh/LICENSE") (Join-Path $RuntimeDir "licenses/DSH-LICENSE.txt") -Force
 

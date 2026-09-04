@@ -38,10 +38,17 @@
     let start = null;
     let moved = false;
 
+    // 自定义吉祥物(主题工坊上传的形象): 有值时替换所有表情图
+    let customMascot = '';
+    window.petBridge.onMascot((url) => {
+      customMascot = url || '';
+      if (customMascot) mascot.src = customMascot;
+    });
+
     window.petBridge.onState((state) => {
       const mood = ['idle','thinking','complete','error'].includes(state.mood) ? state.mood : 'idle';
       pet.dataset.mood = mood;
-      mascot.src = `assets/pet-${mood}.png`;
+      mascot.src = customMascot || `assets/pet-${mood}.png`;
       dot.style.background = state.color || '#55d8c2';
       dot.style.color = state.color || '#55d8c2';
       label.textContent = state.text || 'DeepSeek 已连接';

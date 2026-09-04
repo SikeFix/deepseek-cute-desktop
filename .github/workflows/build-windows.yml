@@ -1,0 +1,42 @@
+name: build-windows
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: windows/package-lock.json
+
+      - name: Prepare bundled runtime (Node + dsh)
+        working-directory: windows
+        shell: pwsh
+        run: ./scripts/prepare-runtime.ps1
+
+      - name: Install dev dependencies
+        working-directory: windows
+        run: npm ci
+
+      - name: Build NSIS installer
+        working-directory: windows
+        run: npx electron-builder --win nsis --x64 --publish never
+
+      - name: Upload build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeepSeek-Cute-Windows-x64
+          path: |
+            windows/dist/*.exe
+            windows/dist/latest.yml
+            windows/dist/*.blockmap
+          if-no-files-found: error

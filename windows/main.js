@@ -30,6 +30,7 @@ let providerWindow;
 let backendProcess;
 let backendStarting = false;
 let backendLogStream;
+let backendRestartAttempts = 0;
 let healthTimer;
 let updateTimer;
 let healthFailures = 0;
@@ -44,8 +45,16 @@ let serviceStatus = { state: 'starting', message: '正在准备本地服务…' 
 let updateStatus = { state: 'idle', message: `当前版本 ${app.getVersion()}`, percent: 0 };
 let insertedThemeCSS;
 let themeMode = 'cute';
-const PROVIDER_WIZARD_VERSION = '2026-08-v4-vision-qwen-1';
-const QWEN_ENDPOINT = 'https://ai-xtu.yangrucheng.eu.org/v1';
+const PROVIDER_WIZARD_VERSION = '2026-09-v5-ssnh';
+const QWEN_ENDPOINT = 'https://www.ssnh.top/v1';
+const WEBSITE_URL = 'https://www.ssnh.top';
+const BUILTIN_THEMES = [
+  { id: 'official', label: '官方样式' },
+  { id: 'cute', label: '正太主题' },
+  { id: 'aurora', label: '暗夜极光' },
+  { id: 'paper', label: '奶油纸感' },
+  { id: 'deepsea', label: '深海鲸语' }
+];
 
 const resourcePath = (...parts) => path.join(app.isPackaged ? process.resourcesPath : __dirname, ...parts);
 const petPositionPath = () => path.join(app.getPath('userData'), 'pet-position.json');
@@ -67,6 +76,73 @@ function preferences() {
 
 function updatePreferences(patch) {
   writeJSON(preferencesPath(), { ...preferences(), ...patch });
+}
+
+// ---------- 主题(内置 5 套 + 用户自定义) ----------
+// 自定义主题保存在用户目录(<userData>/Themes), 应用更新只替换安装目录,
+// 因此用户主题与自定义吉祥物不会因升级丢失。
+
+function themesDir() {
+  const dir = path.join(app.getPath('userData'), 'Themes');
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+function customTheme(id) {
+  const obj = readJSON(path.join(themesDir(), `${id}.json`), null);
+  if (!obj || typeof obj.css !== 'string' || !obj.css) return null;
+  return obj;
+}
+
+function customThemes() {
+  let entries = [];
+  try { entries = fs.readdirSync(themesDir()); } catch (_) { return []; }
+  const themes = entries
+    .filter((f) => f.endsWith('.json'))
+    .map((f) => readJSON(path.join(themesDir(), f), null))
+    .filter((t) => t && typeof t.css === 'string' && t.css);
+  themes.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+  return themes;
+}
+
+function saveCustomTheme(theme) {
+  const id = String(theme.id || '').trim();
+  if (!id || typeof theme.css !== 'string' || !theme.css) return null;
+  const safe = id.replace(/[\\/]/g, '-');
+  try {
+    writeJSON(path.join(themesDir(), `${safe}.json`), { ...theme, id: safe, createdAt: theme.createdAt || Date.now() });
+    return safe;
+  } catch (_) {
+    return null;
+  }
+}
+
+function removeCustomTheme(id) {
+  const file = path.join(themesDir(), `${id}.json`);
+  if (!fs.existsSync(file)) return false;
+  try { fs.rmSync(file); return true; } catch (_) { return false; }
+}
+
+function themeList() {
+  const list = BUILTIN_THEMES.slice();
+  for (const t of customThemes()) list.push({ id: t.id, label: t.name || t.id });
+  return list;
+}
+
+function isValidTheme(id) {
+  return id === 'official'
+    || BUILTIN_THEMES.some((t) => t.id === id)
+    || customTheme(id) !== null;
+}
+
+function loadThemeCSS(id) {
+  if (id === 'official') return '';
+  const custom = customTheme(id);
+  if (custom) return custom.css;
+  const file = id === 'cute'
+    ? resourcePath('theme', 'theme.css')
+    : resourcePath('theme', 'Themes', `${id}.css`);
+  return fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
 }
 
 function qwenAPIKey() {
@@ -124,6 +200,26 @@ function formatDuration(milliseconds) {
   return remainder ? `${minutes}分${remainder}秒` : `${minutes}分钟`;
 }
 
+// 清理占用 3080 端口的残留后端(上次异常退出/重复启动)。不清理会导致
+// EADDRINUSE → 新进程起不来, 旧进程还在跑, 内存翻倍、状态错乱。
+function killStalePortListeners() {
+  try {
+    const result = spawnSync('netstat', ['-ano'], { windowsHide: true, encoding: 'utf8', timeout: 6000 });
+    if (result.status !== 0 || !result.stdout) return;
+    const stale = new Set();
+    for (const line of result.stdout.split(/\r?\n/)) {
+      const m = line.match(/TCP\s+127\.0\.0\.1:3080\s+\S+\s+LISTENING\s+(\d+)/);
+      if (m && Number(m[1]) !== process.pid) stale.add(m[1]);
+    }
+    for (const pid of stale) {
+      spawnSync('taskkill', ['/PID', String(pid), '/F'], { windowsHide: true, timeout: 6000 });
+      log.warn(`[backend] killed stale port 3080 listener pid=${pid}`);
+    }
+  } catch (error) {
+    log.warn('[backend] stale port cleanup failed', error.message);
+  }
+}
+
 function checkOnline() {
   return new Promise((resolve) => {
     const request = http.request(APP_URL, { method: 'HEAD', timeout: 1400 }, (response) => {
@@ -145,6 +241,7 @@ async function waitForBackendReady(maxAttempts = 60) {
   for (let attempt = 1; attempt <= maxAttempts && !quitting; attempt += 1) {
     if (await checkOnline()) {
       healthFailures = 0;
+      backendRestartAttempts = 0;
       publishServiceStatus('online');
       loadMainURL();
       log.info(`[startup ${elapsed()}] backend ready after ${attempt} fast checks`);
@@ -173,10 +270,12 @@ function publishServiceStatus(status, message) {
     offline: '本地服务暂时不可用'
   };
   const next = { state: status, message: message || messages[status] || messages.offline };
-  if (serviceStatus.state !== next.state || serviceStatus.message !== next.message) {
-    log.info(`[startup ${elapsed()}] service=${next.state} ${next.message}`);
-  }
+  const changed = serviceStatus.state !== next.state || serviceStatus.message !== next.message;
+  if (changed) log.info(`[startup ${elapsed()}] service=${next.state} ${next.message}`);
   serviceStatus = next;
+  // 健康探测每 5 秒一次, 状态没变化时不向渲染进程推送,
+  // 避免在主页面繁忙时反复 executeJavaScript 造成卡顿。
+  if (!changed) return;
   sendRendererStatus('service-status', serviceStatus);
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.executeJavaScript(
@@ -304,11 +403,16 @@ async function startBackend() {
   }
 
   publishServiceStatus('starting', '组件已就绪，正在启动本地服务…');
+  killStalePortListeners();
   const backendLogPath = path.join(app.getPath('userData'), 'backend.log');
   backendLogStream = fs.createWriteStream(backendLogPath, { flags: 'a' });
-  backendLogStream.write(`\n[${new Date().toISOString()}] starting ${nodeExe} ${dshBin} web\n`);
+  // --max-old-space-size: 限制后端 V8 堆, 防止长会话内存无上限增长触发
+  // 长 GC 停顿(表现为界面一卡一卡); --no-open: 内核启动/自动重启时
+  // 不再弹出系统浏览器窗口。
+  const backendArgs = ['--max-old-space-size=1024', dshBin, 'web', '--no-open'];
+  backendLogStream.write(`\n[${new Date().toISOString()}] starting ${nodeExe} ${backendArgs.join(' ')}\n`);
   try {
-    backendProcess = spawn(nodeExe, [dshBin, 'web'], {
+    backendProcess = spawn(nodeExe, backendArgs, {
       cwd: app.getPath('home'),
       env: {
         ...process.env,
@@ -341,13 +445,17 @@ async function startBackend() {
     publishServiceStatus('offline');
   });
   backendProcess.once('exit', (code, signal) => {
-    log.warn(`[backend] exit code=${code} signal=${signal}`);
+    log.warn(`[backend] exit code=${code} signal=${signal} restartAttempt=${backendRestartAttempts}`);
     backendLogStream?.end(`\n[${new Date().toISOString()}] exit code=${code} signal=${signal}\n`);
     backendLogStream = undefined;
     backendProcess = undefined;
     if (!quitting) {
-      publishServiceStatus('offline');
-      setTimeout(() => checkHealth(true), 1400);
+      // 指数退避重启: 1.5s → 3s → 6s → 12s → 30s 封顶。连续崩溃时不再
+      // 每 1.4 秒拉一次(旧行为), 避免崩溃循环占满 CPU 与内存。
+      backendRestartAttempts += 1;
+      const backoff = Math.min(1500 * 2 ** Math.min(backendRestartAttempts - 1, 4), 30000);
+      publishServiceStatus('offline', '本地服务异常退出，正在自动恢复…');
+      setTimeout(() => checkHealth(true), backoff);
     }
   });
 }
@@ -381,21 +489,49 @@ function loadMainURL(url = APP_URL) {
 }
 
 async function applyThemeMode(mode, persist = true) {
-  themeMode = mode === 'official' ? 'official' : 'cute';
+  if (!isValidTheme(mode)) mode = 'cute';
+  themeMode = mode;
   if (persist) updatePreferences({ themeMode });
   if (!mainWindow || mainWindow.isDestroyed()) return;
   if (insertedThemeCSS) {
     try { await mainWindow.webContents.removeInsertedCSS(insertedThemeCSS); } catch (_) {}
     insertedThemeCSS = undefined;
   }
-  if (themeMode === 'cute' && mainWindow.webContents.getURL().startsWith(APP_URL)) {
-    const css = fs.readFileSync(resourcePath('theme', 'theme.css'), 'utf8');
+  const css = loadThemeCSS(themeMode);
+  if (css && mainWindow.webContents.getURL().startsWith(APP_URL)) {
     insertedThemeCSS = await mainWindow.webContents.insertCSS(css).catch(() => undefined);
   }
+  // dataset 用具体主题 ID(内置 aurora/paper/deepsea 或 custom-*),
+  // __dsmThemeMode 只区分 official/cute(交互层: 波纹/指针光效仅在 cute 系生效)。
+  const normalized = themeMode === 'official' ? 'official' : 'cute';
+  const mascot = customTheme(themeMode)?.mascot || '';
   mainWindow.webContents.executeJavaScript(
-    `window.__dsmThemeMode=${JSON.stringify(themeMode)};document.documentElement.dataset.dsmTheme=window.__dsmThemeMode;window.__dsmSetThemeMode&&window.__dsmSetThemeMode(window.__dsmThemeMode);window.__dsmWindowsThemeChanged&&window.__dsmWindowsThemeChanged(window.__dsmThemeMode)`
+    `document.documentElement.dataset.dsmTheme=${JSON.stringify(themeMode)};` +
+    `window.__dsmThemeMode=${JSON.stringify(normalized)};` +
+    `window.__dsmMascotURL=${JSON.stringify(mascot)};` +
+    `window.__dsmWindowsThemeChanged&&window.__dsmWindowsThemeChanged(${JSON.stringify(themeMode)});` +
+    `window.__dsmApplyMascot&&window.__dsmApplyMascot(${JSON.stringify(mascot)});`
   ).catch(() => {});
+  syncMascotAssets(mascot);
   refreshTrayMenu();
+}
+
+// 把激活主题的自定义吉祥物同步给桌面宠物与托盘图标(与 macOS 行为一致)
+function syncMascotAssets(mascot) {
+  if (petWindow && !petWindow.isDestroyed()) {
+    petWindow.webContents.send('pet-mascot', mascot || '');
+  }
+  if (!tray) return;
+  try {
+    if (mascot && mascot.startsWith('data:image')) {
+      const img = nativeImage.createFromDataURL(mascot);
+      if (!img.isEmpty()) {
+        tray.setImage(img.resize({ width: 20, height: 20 }));
+        return;
+      }
+    }
+    tray.setImage(nativeImage.createFromPath(resourcePath('assets', 'icon.png')).resize({ width: 20, height: 20 }));
+  } catch (_) {}
 }
 
 async function injectTheme() {
@@ -404,8 +540,9 @@ async function injectTheme() {
   if (!currentURL.startsWith(APP_URL)) return;
   const interactions = fs.readFileSync(resourcePath('theme', 'interactions.js'), 'utf8');
   const windowsChrome = fs.readFileSync(path.join(__dirname, 'window-inject.js'), 'utf8');
-  themeMode = preferences().themeMode === 'official' ? 'official' : 'cute';
-  await mainWindow.webContents.executeJavaScript(`window.__dsmThemeMode=${JSON.stringify(themeMode)}`).catch(() => {});
+  const savedTheme = preferences().themeMode;
+  themeMode = isValidTheme(savedTheme) ? savedTheme : 'cute';
+  await mainWindow.webContents.executeJavaScript(`window.__dsmThemeMode=${JSON.stringify(themeMode === 'official' ? 'official' : 'cute')}`).catch(() => {});
   await applyThemeMode(themeMode, false);
   mainWindow.webContents.executeJavaScript(interactions).catch(() => {});
   mainWindow.webContents.executeJavaScript(windowsChrome).catch(() => {});
@@ -511,7 +648,10 @@ function createPetWindow() {
   petWindow.setAlwaysOnTop(true, 'floating');
   petWindow.loadFile(path.join(__dirname, 'pet.html'));
   petWindow.once('ready-to-show', () => petWindow.showInactive());
-  petWindow.webContents.on('did-finish-load', () => setPetState(petState.mood, petState.text, petState.color));
+  petWindow.webContents.on('did-finish-load', () => {
+    setPetState(petState.mood, petState.text, petState.color);
+    petWindow.webContents.send('pet-mascot', customTheme(themeMode)?.mascot || '');
+  });
   petWindow.on('moved', savePetPosition);
 }
 
@@ -569,6 +709,229 @@ function showModelProviderWizard() {
   providerWindow.on('closed', () => { providerWindow = undefined; });
 }
 
+// ---------- 主题工坊(自定义主题: 颜色/壁纸/文案/吉祥物) ----------
+
+let studioWindow;
+
+function showThemeStudioWindow() {
+  if (studioWindow && !studioWindow.isDestroyed()) {
+    studioWindow.show();
+    studioWindow.focus();
+    return;
+  }
+  const htmlFile = path.join(__dirname, 'theme-studio.html');
+  if (!fs.existsSync(htmlFile)) {
+    dialog.showErrorBox(APP_NAME, '主题工坊不可用，应用组件不完整，请重新安装最新版。');
+    return;
+  }
+  studioWindow = new BrowserWindow({
+    width: 1040,
+    height: 800,
+    minWidth: 860,
+    minHeight: 620,
+    title: '主题工坊',
+    show: false,
+    backgroundColor: '#17191a',
+    icon: resourcePath('assets', 'icon.png'),
+    webPreferences: {
+      preload: path.join(__dirname, 'studio-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  });
+  studioWindow.removeMenu();
+  studioWindow.loadFile(htmlFile);
+  studioWindow.once('ready-to-show', () => studioWindow?.show());
+  studioWindow.on('closed', () => { studioWindow = undefined; });
+}
+
+function studioReply(replyID, result) {
+  if (!replyID || !studioWindow || studioWindow.isDestroyed()) return;
+  studioWindow.webContents.executeJavaScript(
+    `window.__dsmStudioReplies&&window.__dsmStudioReplies[${JSON.stringify(replyID)}]` +
+    `&&(window.__dsmStudioReplies[${JSON.stringify(replyID)}](${JSON.stringify(result)}),delete window.__dsmStudioReplies[${JSON.stringify(replyID)}])`
+  ).catch(() => {});
+}
+
+function handleStudioMessage(payload = {}) {
+  if (typeof payload !== 'object') return;
+  const replyID = payload.replyId;
+  switch (payload.action) {
+    case 'save': {
+      const theme = { ...payload };
+      delete theme.replyId;
+      delete theme.action;
+      const applyNow = Boolean(theme.apply);
+      delete theme.apply;
+      const savedID = saveCustomTheme(theme);
+      if (savedID) {
+        if (applyNow) applyThemeMode(savedID);
+        studioReply(replyID, { ok: true, id: savedID });
+        log.info(`[studio] custom theme saved id=${savedID}`);
+      } else {
+        studioReply(replyID, { ok: false, error: '保存失败，请重试' });
+      }
+      break;
+    }
+    case 'list': {
+      const themes = customThemes().map((t) => ({
+        id: t.id,
+        name: t.name || t.id,
+        colors: t.colors || null
+      }));
+      studioReply(replyID, { ok: true, themes });
+      break;
+    }
+    case 'get': {
+      const tid = String(payload.id || '');
+      const theme = customTheme(tid);
+      studioReply(replyID, theme ? { ok: true, theme } : { ok: false });
+      break;
+    }
+    case 'apply': {
+      const tid = String(payload.id || '');
+      if (customTheme(tid)) {
+        applyThemeMode(tid);
+        studioReply(replyID, { ok: true });
+      } else {
+        studioReply(replyID, { ok: false, error: '主题不存在' });
+      }
+      break;
+    }
+    case 'remove': {
+      const tid = String(payload.id || '');
+      if (removeCustomTheme(tid)) {
+        if (themeMode === tid) applyThemeMode('cute');
+        studioReply(replyID, { ok: true });
+      } else {
+        studioReply(replyID, { ok: false, error: '删除失败' });
+      }
+      break;
+    }
+    case 'close':
+      studioWindow?.close();
+      break;
+    default:
+      studioReply(replyID, { ok: false, error: '未知操作' });
+  }
+}
+
+// ---------- Token 使用统计 ----------
+
+let statsWindow;
+
+function statsCacheFile() {
+  return path.join(app.getPath('userData'), 'usage-stats.json');
+}
+
+function readCachedStatsResult() {
+  const obj = readJSON(statsCacheFile(), null);
+  return obj && obj.result ? obj.result : null;
+}
+
+function runUsageStats(force = false) {
+  return new Promise((resolve) => {
+    const nodeExe = resourcePath('runtime', 'node', 'node.exe');
+    const script = resourcePath('runtime', 'usage-stats.mjs');
+    if (!fs.existsSync(nodeExe) || !fs.existsSync(script)) {
+      resolve(readCachedStatsResult());
+      return;
+    }
+    let child;
+    try {
+      child = spawn(nodeExe, ['--max-old-space-size=1024', script, '--out', statsCacheFile()], {
+        cwd: app.getPath('home'),
+        windowsHide: true,
+        env: { ...process.env, NO_COLOR: '1' },
+        stdio: ['ignore', 'pipe', 'ignore']
+      });
+    } catch (error) {
+      log.warn('[stats] spawn failed', error.message);
+      resolve(readCachedStatsResult());
+      return;
+    }
+    let stdout = '';
+    let settled = false;
+    const watchdog = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        try { child.kill(); } catch (_) {}
+        resolve(readCachedStatsResult());
+      }
+    }, 90000);
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.on('error', (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(watchdog);
+      log.warn('[stats] run failed', error.message);
+      resolve(readCachedStatsResult());
+    });
+    child.on('close', (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(watchdog);
+      const text = stdout.trim();
+      if (code === 0 && text) {
+        try { resolve(JSON.parse(text)); return; } catch (_) {}
+      }
+      log.warn(`[stats] run status=${code}, fallback to cache`);
+      resolve(readCachedStatsResult());
+    });
+  });
+}
+
+function showStatsWindow() {
+  if (statsWindow && !statsWindow.isDestroyed()) {
+    statsWindow.show();
+    statsWindow.focus();
+    return;
+  }
+  const htmlFile = path.join(__dirname, 'stats.html');
+  if (!fs.existsSync(htmlFile)) {
+    dialog.showErrorBox(APP_NAME, '统计不可用，应用组件不完整，请重新安装最新版。');
+    return;
+  }
+  statsWindow = new BrowserWindow({
+    width: 1000,
+    height: 820,
+    minWidth: 800,
+    minHeight: 620,
+    title: 'Token 使用统计',
+    show: false,
+    backgroundColor: '#17191a',
+    icon: resourcePath('assets', 'icon.png'),
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  });
+  statsWindow.removeMenu();
+  statsWindow.once('ready-to-show', () => statsWindow?.show());
+  statsWindow.on('closed', () => { statsWindow = undefined; });
+  // 有缓存就立刻渲染, 随后后台增量扫描并注入最新数据
+  // 转义: </ 防止提前闭合 <script>; */ 防止截断占位注释(JSON 字符串内 \/ 合法)。
+  const rendered = fs.readFileSync(htmlFile, 'utf8')
+    .replace(/\/\*__DSM_STATS_DATA__\*\/null/, (match) => {
+      const cached = readCachedStatsResult();
+      if (!cached) return match;
+      const json = JSON.stringify(cached).replace(/</g, '\\u003c').replace(/\*\//g, '*\\/');
+      return `/*__DSM_STATS_DATA__*/${json}`;
+    });
+  const tempFile = path.join(app.getPath('userData'), 'stats-rendered.html');
+  fs.mkdirSync(path.dirname(tempFile), { recursive: true });
+  fs.writeFileSync(tempFile, rendered);
+  statsWindow.loadFile(tempFile).catch(() => {});
+  runUsageStats(false).then((data) => {
+    if (!data || !statsWindow || statsWindow.isDestroyed()) return;
+    statsWindow.webContents.executeJavaScript(
+      `window.__dsmStatsInject&&window.__dsmStatsInject(${JSON.stringify(data)})`
+    ).catch(() => {});
+  });
+}
+
 function restartBackendForProviderChange() {
   publishServiceStatus('starting', '模型服务已更新，正在重启本地内核…');
   showWaiting('模型服务已更新，正在安全重启本地 DeepSeek 内核…');
@@ -578,18 +941,28 @@ function restartBackendForProviderChange() {
 
 function refreshTrayMenu() {
   if (!tray) return;
+  const themeItems = themeList().map((t) => ({
+    label: t.label,
+    type: 'radio',
+    checked: themeMode === t.id,
+    click: () => applyThemeMode(t.id)
+  }));
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: '打开 DeepSeek', click: () => showMain() },
+    { label: '在浏览器中打开', click: () => shell.openExternal(APP_URL) },
     { label: '显示/隐藏桌面宠物', click: () => petWindow?.isVisible() ? petWindow.hide() : petWindow.showInactive() },
     { label: '重试本地服务', click: () => startBackend() },
     {
       label: '界面主题',
       submenu: [
-        { label: 'DeepSeek 官方样式', type: 'radio', checked: themeMode === 'official', click: () => applyThemeMode('official') },
-        { label: '正太主题', type: 'radio', checked: themeMode === 'cute', click: () => applyThemeMode('cute') }
+        ...themeItems,
+        { type: 'separator' },
+        { label: '主题工坊…（创建自定义主题）', click: () => showThemeStudioWindow() }
       ]
     },
+    { label: 'Token 使用统计', click: () => showStatsWindow() },
     { label: '模型服务设置…', click: () => showModelProviderWizard() },
+    { label: '邀请登录 ssnh.top', click: () => shell.openExternal(WEBSITE_URL) },
     { label: '检查应用更新', click: () => checkForUpdates(true) },
     { label: '打开诊断日志', click: () => shell.showItemInFolder(log.transports.file.getFile().path) },
     { type: 'separator' },
@@ -620,8 +993,31 @@ ipcMain.on('dsm-service', (_event, command) => {
 ipcMain.on('dsm-update', () => checkForUpdates(true));
 ipcMain.handle('dsm-status', () => ({ service: serviceStatus, update: updateStatus }));
 ipcMain.handle('dsm-theme-get', () => themeMode);
-ipcMain.on('dsm-theme-set', (_event, mode) => applyThemeMode(mode));
-ipcMain.on('dsm-provider-open', () => showModelProviderWizard());
+ipcMain.handle('dsm-theme-list', () => themeList());
+ipcMain.on('dsm-theme-set', (event, mode) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents) return;
+  applyThemeMode(String(mode));
+});
+ipcMain.on('dsm-provider-open', (event) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents) return;
+  showModelProviderWizard();
+});
+ipcMain.on('dsm-studio-open', (event) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents) return;
+  showThemeStudioWindow();
+});
+ipcMain.on('dsm-studio', (_event, payload) => {
+  if (!studioWindow || _event.sender !== studioWindow.webContents) return;
+  handleStudioMessage(payload);
+});
+ipcMain.on('dsm-stats-open', (event) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents) return;
+  showStatsWindow();
+});
+ipcMain.on('dsm-open-website', (event) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents) return;
+  shell.openExternal(WEBSITE_URL);
+});
 ipcMain.handle('provider-save', (_event, payload = {}) => {
   try {
     let needsRestart = false;
@@ -716,10 +1112,12 @@ else {
   app.on('second-instance', () => showMain());
   app.whenReady().then(() => {
     log.info(`[startup ${elapsed()}] app ready version=${app.getVersion()} packaged=${app.isPackaged}`);
-    themeMode = preferences().themeMode === 'official' ? 'official' : 'cute';
+    const savedTheme = preferences().themeMode;
+    themeMode = isValidTheme(savedTheme) ? savedTheme : 'cute';
     createMainWindow();
     createPetWindow();
     createTray();
+    syncMascotAssets(customTheme(themeMode)?.mascot || '');
     startBackend();
     setupAutoUpdater();
     healthTimer = setInterval(() => checkHealth(true), 5000);

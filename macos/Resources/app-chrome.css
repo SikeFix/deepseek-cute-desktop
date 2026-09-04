@@ -1,0 +1,165 @@
+/* ============================================================
+   DSM 应用外观层 (与主题无关, 官方/内置/自定义主题均生效)
+   - 52px 顶部悬浮栏: 磨砂玻璃 + 品牌色细光线, 状态胶囊居右
+   - 页面顶部留白, 壁纸/背景继续铺到窗口最顶端
+   - 官方模式下品牌行与欢迎区鲸鱼替换为吉祥物头像
+   ============================================================ */
+
+:root {
+  --dsm-chrome-h: 52px;
+}
+
+[class$="_frame"] {
+  box-sizing: border-box;
+  padding-top: var(--dsm-chrome-h) !important;
+}
+
+/* 主题模板里带 30px padding-top 的旧规则(同级 !important),
+   用更高优先级选择器压住, 保证内容永远从 52px 顶栏之下开始 */
+html [class$="_frame"] {
+  padding-top: var(--dsm-chrome-h) !important;
+}
+
+/* ---------- 顶部悬浮栏 ---------- */
+#dsmTopbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--dsm-chrome-h);
+  z-index: 2147482600;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 16px;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--dsw-alias-bg-base, #ffffff) 64%, transparent);
+  -webkit-backdrop-filter: blur(24px) saturate(175%);
+  backdrop-filter: blur(24px) saturate(175%);
+  border-bottom: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary, #101010) 9%, transparent);
+}
+
+#dsmTopbar::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 3%,
+    color-mix(in srgb, var(--dsw-alias-brand-primary, #4c8dff) 30%, transparent) 50%,
+    transparent 97%);
+  opacity: .85;
+  pointer-events: none;
+}
+
+/* ---------- 状态胶囊 ---------- */
+#dsmTopStatus {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary, #101010) 13%, transparent);
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-2, #f4f4f6) 80%, transparent);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  backdrop-filter: blur(12px) saturate(150%);
+  color: var(--dsw-alias-label-primary, #101010);
+  font: 600 12px/1 -apple-system, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+  letter-spacing: .02em;
+  cursor: default;
+  box-shadow: 0 4px 14px rgba(24, 20, 32, .10);
+  transition: background-color .25s ease, border-color .25s ease, box-shadow .25s ease;
+}
+
+#dsmTopStatus:not([data-state="online"]) {
+  cursor: pointer;
+}
+#dsmTopStatus:not([data-state="online"]):hover {
+  border-color: color-mix(in srgb, var(--dsw-alias-brand-primary, #4c8dff) 45%, transparent);
+  box-shadow: 0 5px 16px rgba(24, 20, 32, .14);
+}
+
+.dsm-top-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f5b942;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #f5b942 22%, transparent);
+  transition: background-color .3s ease, box-shadow .3s ease;
+}
+#dsmTopStatus[data-state="online"] .dsm-top-dot {
+  background: #34c77b;
+  box-shadow: 0 0 0 3px rgba(52, 199, 123, .20);
+}
+#dsmTopStatus[data-state="offline"] .dsm-top-dot {
+  background: #f0564a;
+  box-shadow: 0 0 0 3px rgba(240, 86, 74, .22);
+  animation: dsmTopPulse 1.6s ease-in-out infinite;
+}
+@keyframes dsmTopPulse {
+  50% { opacity: .4; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #dsmTopStatus[data-state="offline"] .dsm-top-dot { animation: none; }
+}
+
+/* 旧版独立状态灯由顶栏胶囊接管, 一律隐藏 */
+.dsm-service-pill {
+  display: none !important;
+}
+
+/* 模型名称以大写显示(用户偏好) */
+button[class$="_trigger"] span[class$="_triggerLabel"] {
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  font-weight: 700;
+}
+
+/* ---------- 吉祥物头像(官方模式) ---------- */
+.dsm-avatar {
+  display: inline-block;
+  flex: 0 0 auto;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.dsm-brand-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-label-primary, #000000) 14%, transparent),
+    0 2px 8px rgba(20, 18, 30, .10);
+}
+
+.dsm-hero-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 22px;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-label-primary, #000000) 12%, transparent),
+    0 10px 26px rgba(24, 20, 36, .16);
+}
+
+[class*="_fishHitbox"] {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* 官方模式欢迎区: 吉祥物呼吸光晕 */
+html[data-dsm-theme="official"] .dsm-hero-avatar {
+  animation: dsmHeroBreath 4.2s ease-in-out infinite;
+}
+@keyframes dsmHeroBreath {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-dsm-theme="official"] .dsm-hero-avatar { animation: none; }
+}

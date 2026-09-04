@@ -36,7 +36,7 @@ if (args.provider === 'official') {
     reasoningEffort: 'high'
   };
 } else if (args.provider === 'qwen') {
-  const baseURL = new URL(args.baseURL || 'https://ai-xtu.yangrucheng.eu.org/v1');
+  const baseURL = new URL(args.baseURL || 'https://www.ssnh.top/v1');
   if (baseURL.protocol !== 'https:') throw new Error('Qwen endpoint must use HTTPS');
   const model = (args.model || 'qwen3.8-27b').trim();
   if (!model) throw new Error('Qwen model must not be empty');

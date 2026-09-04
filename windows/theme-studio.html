@@ -1,0 +1,504 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>主题工坊</title>
+<style>
+  :root { color-scheme: light; --accent:#f36b50; --sun:#f5dc26; --mint:#62e8d3; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif; background:#faf7f0; color:#30261f; }
+  header { display:flex; align-items:center; gap:12px; padding:16px 22px; border-bottom:1px solid #eadfcd; background:#fffdf8; }
+  header h1 { font-size:18px; margin:0; }
+  header .sub { color:#8a7a68; font-size:12px; }
+  header .close { margin-left:auto; width:30px; height:30px; border:0; border-radius:9px; background:#f0e8d8; cursor:pointer; font-size:15px; }
+  header .close:hover { background:#f6d7d2; }
+  .layout { display:grid; grid-template-columns: 350px 1fr; gap:0; min-height:calc(100vh - 63px); }
+  .panel { padding:20px 22px; overflow-y:auto; max-height:calc(100vh - 63px); }
+  .panel.left { border-right:1px solid #eadfcd; background:#fffdf8; }
+  .field { margin-bottom:16px; }
+  .field > label { display:block; font-size:12px; font-weight:700; color:#6e5d50; margin-bottom:7px; }
+  input[type="text"], textarea { width:100%; padding:9px 11px; border:1.5px solid #ddceb8; border-radius:10px; font:13px inherit; background:#fff; outline:none; }
+  input[type="text"]:focus, textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(243,107,80,.12); }
+  textarea { resize:vertical; min-height:56px; }
+  .colors { display:flex; gap:10px; }
+  .colorpick { flex:1; text-align:center; }
+  .colorpick input[type="color"] { width:100%; height:44px; border:2px solid #e6d9c2; border-radius:12px; padding:3px; background:#fff; cursor:pointer; }
+  .colorpick span { font-size:11px; color:#8a7a68; display:block; margin-top:5px; }
+  .seg { display:flex; background:#f0e8d8; border-radius:11px; padding:3px; }
+  .seg button { flex:1; border:0; background:transparent; padding:7px 0; border-radius:8px; font:700 12px inherit; color:#8a7a68; cursor:pointer; }
+  .seg button.on { background:#fff; color:#30261f; box-shadow:0 2px 6px rgba(60,45,20,.12); }
+  .wallbox { border:1.5px dashed #d8c8a8; border-radius:12px; padding:12px; text-align:center; background:#fff; min-height:96px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; }
+  .wallbox img { max-width:100%; max-height:120px; border-radius:8px; }
+  .wallbox .hint { font-size:11px; color:#a09080; }
+  .wallbox .row { display:flex; gap:8px; }
+  .mini { border:1px solid #d8c8a8; background:#fff; border-radius:8px; padding:5px 10px; font:600 11px inherit; cursor:pointer; color:#6e5d50; }
+  .mini:hover { border-color:var(--accent); color:var(--accent); }
+  .phrases { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .chip { display:inline-flex; align-items:center; gap:5px; background:#f6efe1; border:1px solid #e6d9c2; padding:4px 9px; border-radius:999px; font-size:11px; }
+  .chip b { cursor:pointer; color:#b08968; font-weight:900; }
+  .preset-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .preset { border:2px solid #e6d9c2; border-radius:13px; padding:10px; cursor:pointer; background:#fff; text-align:center; }
+  .preset:hover { border-color:var(--accent); transform:translateY(-1px); }
+  .preset .sw { display:flex; height:26px; border-radius:7px; overflow:hidden; margin-bottom:7px; }
+  .preset .sw i { flex:1; }
+  .preset div { font-size:11px; font-weight:700; color:#6e5d50; }
+  .actions { display:flex; gap:10px; margin-top:20px; }
+  .btn { flex:1; border:0; border-radius:11px; padding:11px 0; font:800 13px inherit; cursor:pointer; }
+  .btn.primary { background:var(--accent); color:#fff; box-shadow:3px 4px 0 rgba(245,220,38,.6); }
+  .btn.primary:disabled { opacity:.5; cursor:wait; }
+  .btn.ghost { background:#f0e8d8; color:#6e5d50; }
+  .status { font-size:12px; margin-top:10px; min-height:16px; color:#1f9d6c; font-weight:700; }
+  .status.err { color:#bf342d; }
+  /* 预览区 */
+  .preview { padding:18px; }
+  .preview h3 { margin:0 0 10px; font-size:13px; color:#8a7a68; }
+  .pv-stage { border-radius:16px; overflow:hidden; border:1px solid #e6d9c2; min-height:420px; display:flex; flex-direction:column; box-shadow:0 14px 40px rgba(80,60,30,.14); }
+  .pv-frame { flex:1; display:flex; background:var(--pv-wall); color:var(--pv-label); }
+  .pv-side { width:170px; background:var(--pv-col); padding:14px 10px; border-right:1px solid var(--pv-border); }
+  .pv-brand { display:flex; align-items:center; gap:8px; background:var(--pv-l1); border:2px solid var(--pv-border2); border-radius:12px; padding:8px; margin-bottom:12px; }
+  .pv-mascot { width:30px; height:30px; border-radius:9px; background:var(--pv-mascot); flex:0 0 30px; }
+  .pv-brand b { font-size:12px; }
+  .pv-item { border-radius:8px; padding:6px 8px; font-size:11px; color:var(--pv-label2); margin-bottom:4px; }
+  .pv-item.sel { background:var(--pv-sel); box-shadow:inset 3px 0 0 var(--pv-accent); color:var(--pv-label); }
+  .pv-main { flex:1; display:flex; flex-direction:column; padding:14px; gap:10px; background:var(--pv-center); }
+  .pv-titlebar { display:flex; align-items:center; justify-content:space-between; }
+  .pv-doc { font-size:12px; font-weight:800; }
+  .pv-mode { font-size:10px; background:var(--pv-l1); border:1px solid var(--pv-border); padding:3px 8px; border-radius:999px; }
+  .pv-bubble { font-size:12px; line-height:1.6; background:var(--pv-read); border-radius:12px; padding:10px 12px; color:var(--pv-readlabel); }
+  .pv-composer { margin-top:auto; display:flex; align-items:center; gap:8px; background:var(--pv-l1); border:2px solid var(--pv-border2); border-radius:14px; padding:9px 11px; }
+  .pv-input { flex:1; font-size:11px; color:var(--pv-label2); }
+  .pv-send { width:26px; height:26px; border-radius:50%; background:var(--pv-accent); box-shadow:2px 3px 0 var(--pv-sun); display:grid; place-items:center; color:var(--pv-ink); font-size:12px; }
+  .pv-btn { font-size:10px; border:1px solid var(--pv-border2); background:var(--pv-l1); color:var(--pv-accent); border-radius:8px; padding:4px 8px; }
+  /* 自定义主题列表 */
+  .saves { margin-top:18px; }
+  .saves h3 { margin:0 0 8px; font-size:13px; color:#8a7a68; }
+  .save-row { display:flex; align-items:center; gap:10px; background:#fff; border:1.5px solid #e6d9c2; border-radius:12px; padding:9px 12px; margin-bottom:8px; }
+  .save-row .dot { width:14px; height:14px; border-radius:5px; flex:0 0 14px; }
+  .save-row .nm { font-size:12px; font-weight:700; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .save-row button { border:0; background:transparent; cursor:pointer; font-size:11px; font-weight:700; padding:4px 8px; border-radius:7px; }
+  .save-row .apply { color:#1f9d6c; } .save-row .apply:hover { background:#e5f5ef; }
+  .save-row .del { color:#bf342d; } .save-row .del:hover { background:#fbe9e6; }
+  .empty { font-size:12px; color:#a09080; text-align:center; padding:14px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎨 主题工坊</h1>
+  <span class="sub">上传图片与文案，保存属于你的界面主题</span>
+  <button class="close" id="close" title="关闭">✕</button>
+</header>
+<div class="layout">
+  <div class="panel left">
+    <div class="field"><label>主题名称</label><input type="text" id="name" maxlength="20" placeholder="例如：我的星空"></div>
+    <div class="field"><label>主题色</label>
+      <div class="colors">
+        <div class="colorpick"><input type="color" id="cAccent" value="#f36b50"><span>主色</span></div>
+        <div class="colorpick"><input type="color" id="cSun" value="#f5dc26"><span>强调</span></div>
+        <div class="colorpick"><input type="color" id="cMint" value="#62e8d3"><span>点缀</span></div>
+      </div>
+    </div>
+    <div class="field"><label>基础色调</label>
+      <div class="seg" id="modeSeg">
+        <button data-mode="dark" class="on">深色</button>
+        <button data-mode="light">浅色</button>
+      </div>
+    </div>
+    <div class="field"><label>背景图片（可选）</label>
+      <div class="wallbox" id="wallbox">
+        <div class="hint">上传一张喜欢的图片作为主题壁纸<br>支持 JPG / PNG，自动压缩</div>
+        <div class="row" style="margin-top:8px">
+          <button class="mini" id="pickWall">上传图片</button>
+          <button class="mini" id="clearWall" style="display:none">移除图片</button>
+        </div>
+        <input type="file" id="wallFile" accept="image/*" hidden>
+      </div>
+    </div>
+    <div class="field"><label>小组件形象（可选）</label>
+      <div class="wallbox" id="mascotBox">
+        <div class="hint">上传吉祥物图片，用作侧栏头像、欢迎页形象<br>以及桌面小宠物和应用图标 · 建议方形 PNG</div>
+        <div class="row" style="margin-top:8px">
+          <button class="mini" id="pickMascot">上传图片</button>
+          <button class="mini" id="clearMascot" style="display:none">移除图片</button>
+        </div>
+        <input type="file" id="mascotFile" accept="image/*" hidden>
+      </div>
+    </div>
+    <div class="field"><label>欢迎文案（服务启动页展示）</label>
+      <textarea id="welcome" maxlength="60" placeholder="例如：正在为你准备今天的灵感…"></textarea>
+    </div>
+    <div class="field"><label>小助手口头禅（点击宠物时的回复，回车添加）</label>
+      <input type="text" id="phraseInput" maxlength="20" placeholder="输入一句，回车添加">
+      <div class="phrases" id="phraseList"></div>
+    </div>
+    <div class="field"><label>从预设出发</label>
+      <div class="preset-grid" id="presetGrid"></div>
+    </div>
+    <div class="actions">
+      <button class="btn primary" id="save">保存主题</button>
+      <button class="btn ghost" id="saveApply">保存并使用</button>
+    </div>
+    <div class="status" id="status"></div>
+    <div class="saves">
+      <h3>已保存的主题</h3>
+      <div id="saveList"><div class="empty">还没有自定义主题</div></div>
+    </div>
+  </div>
+  <div class="panel preview">
+    <h3>实时预览</h3>
+    <div class="pv-stage"><div class="pv-frame" id="pvFrame">
+      <div class="pv-side">
+        <div class="pv-brand"><div class="pv-mascot"></div></div>
+        <div class="pv-item sel">适配新API接入文档</div>
+        <div class="pv-item">你好</div>
+        <div class="pv-item">前端设计</div>
+        <div class="pv-item">whatsapp</div>
+        <div class="pv-item">远程修复 111.68.9.74</div>
+      </div>
+      <div class="pv-main">
+        <div class="pv-titlebar"><span class="pv-doc">适配新API接入文档标题</span><span class="pv-mode">标准模式</span></div>
+        <div class="pv-bubble" id="pvBubble">你好！主题预览会随你的配色实时更新，背景图、按钮、文字都会套上新主题。</div>
+        <div style="display:flex;gap:8px"><span class="pv-btn">📋 复制</span><span class="pv-btn">👍</span><span class="pv-btn">🌿 分支</span></div>
+        <div class="pv-composer"><span class="pv-input">给智能体发消息…</span><span class="pv-send">↑</span></div>
+      </div>
+    </div></div>
+  </div>
+</div>
+
+<script>
+const THEME_META = {"tokens": ["coral", "sun", "mint", "slate", "ink", "cream", "dk_bg_base", "dk_bg_l1", "dk_bg_l2", "dk_bg_ov", "dk_b_l1", "dk_b_l2", "dk_label_p", "dk_label_pb", "dk_label_pd", "dk_label_s", "dk_label_t", "dk_label_c", "dk_label_ld", "dk_err", "dk_sidebar", "dk_veil", "dk_glow", "lt_bg_base", "lt_bg_l1", "lt_bg_l2", "lt_bg_ov", "lt_b_l1", "lt_b_l2", "lt_brand", "lt_label_p", "lt_label_pb", "lt_label_pd", "lt_label_s", "lt_label_t", "lt_label_c", "lt_label_ld", "lt_err", "lt_ok", "lt_warn", "lt_sidebar", "lt_veil", "lt_glow", "lkdk_bg_base", "lkdk_bg_l1", "lkdk_bg_l2", "lkdk_bg_ov", "lkdk_label_p", "lkdk_label_pb", "lkdk_label_pd", "lkdk_label_s", "lkdk_label_t", "lkdk_label_c", "lkdk_label_ld", "lkdk_b_l1", "lkdk_b_l2", "lkdk_sidebar", "lklt_bg_base", "lklt_bg_l1", "lklt_bg_l2", "lklt_bg_ov", "lklt_sidebar", "col_ls", "col_lc", "col_lde", "col_ds", "col_dc", "col_dde", "read_lp", "read_ls", "read_grad_l", "read_grad_d", "pg_mint", "pg_sun", "pg_coral"], "template": "/* ============================================================\n   DeepSeek · macOS 风格主题 (DSM)\n   单一来源: 客户端插件 styles.insert / Mac App WKUserScript 共用\n   壁纸占位符: __WALL_DARK__ / __WALL_LIGHT__\n   ============================================================ */\n\n/* ---------- 壁纸回退(未加载到图片时是纯渐变) ---------- */\n:root {\n  --dsm-wall-dark: linear-gradient(160deg, #101e20 0%, #16302e 45%, #1d3a34 100%);\n  --dsm-wall-light: linear-gradient(160deg, #fdf8ec 0%, #f6eeda 45%, #eef0dd 100%);\n}\n\n/* ---------- 基础排版质感 ---------- */\nbody {\n  -webkit-font-smoothing: antialiased;\n  -moz-osx-font-smoothing: grayscale;\n  text-rendering: optimizeLegibility;\n}\n\n::selection {\n  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 30%, transparent);\n}\n\n/* ---------- 调色板令牌(强制覆盖, 深浅两套) ---------- */\nhtml[style*=\"color-scheme: dark\"] body,\nhtml[style*=\"color-scheme:dark\"] body {\n  --dsw-alias-bg-base: rgba(16, 28, 30, 0.62) !important;\n  --dsw-alias-bg-layer-1: rgba(26, 40, 40, 0.60) !important;\n  --dsw-alias-bg-layer-2: rgba(38, 54, 52, 0.55) !important;\n  --dsw-alias-bg-overlay: rgba(24, 36, 36, 0.94) !important;\n  --dsw-alias-border-l1: rgba(232, 205, 148, 0.14) !important;\n  --dsw-alias-border-l2: rgba(232, 205, 148, 0.24) !important;\n  --dsw-alias-brand-primary: #d99a3d !important;\n  --dsw-alias-label-primary: #f7efdc !important;\n  --dsw-alias-label-secondary: #b8b39a !important;\n  --dsw-alias-state-error-primary: #ff8a7a !important;\n  --dsw-alias-state-success-primary: #6fd3a3 !important;\n  --dsw-alias-state-warn-primary: #ffc46b !important;\n  --dsw-specific-sidebar-fill: rgba(18, 30, 30, 0.45) !important;\n  --dsm-wall: var(--dsm-wall-dark);\n  --dsm-veil: linear-gradient(180deg, rgba(12, 22, 22, 0.30), rgba(12, 22, 22, 0.52));\n  --dsm-accent-glow: rgba(224, 169, 79, 0.30);\n}\n\nhtml[style*=\"color-scheme: light\"] body,\nhtml[style*=\"color-scheme:light\"] body {\n  --dsw-alias-bg-base: rgba(250, 244, 230, 0.72) !important;\n  --dsw-alias-bg-layer-1: rgba(255, 251, 241, 0.74) !important;\n  --dsw-alias-bg-layer-2: rgba(246, 238, 219, 0.76) !important;\n  --dsw-alias-bg-overlay: rgba(255, 252, 244, 0.95) !important;\n  --dsw-alias-border-l1: rgba(146, 106, 46, 0.14) !important;\n  --dsw-alias-border-l2: rgba(146, 106, 46, 0.24) !important;\n  --dsw-alias-brand-primary: #b97f26 !important;\n  --dsw-alias-label-primary: #2e2a1e !important;\n  --dsw-alias-label-secondary: #7a7257 !important;\n  --dsw-alias-state-error-primary: #d5443b !important;\n  --dsw-alias-state-success-primary: #1f9d6c !important;\n  --dsw-alias-state-warn-primary: #b06e10 !important;\n  --dsw-specific-sidebar-fill: rgba(255, 250, 238, 0.50) !important;\n  --dsm-wall: var(--dsm-wall-light);\n  --dsm-veil: linear-gradient(180deg, rgba(255, 250, 238, 0.48), rgba(248, 240, 220, 0.60));\n  --dsm-accent-glow: rgba(200, 148, 54, 0.25);\n}\n\n/* ---------- 窗口框架: 壁纸 + 呼吸极光 ----------\n   注意: 玻璃模糊一律放负 z 伪元素, 绝不能加在容器自身上 ——\n   backdrop-filter 会把 fixed 弹层(设置面板/批准框等)困在容器内。 */\n[class$=\"_frame\"] {\n  position: relative;\n  isolation: isolate;\n  background-image: var(--dsm-veil), var(--dsm-wall);\n  background-size: cover, cover;\n  background-position: center, center;\n  background-repeat: no-repeat, no-repeat;\n}\n\n[class$=\"_frame\"]::after {\n  content: \"\";\n  position: absolute;\n  inset: 0;\n  z-index: -1;\n  pointer-events: none;\n  background:\n    radial-gradient(55% 45% at 78% 12%, rgba(224, 169, 79, 0.15), transparent 62%),\n    radial-gradient(45% 38% at 16% 92%, rgba(63, 157, 142, 0.13), transparent 60%),\n    radial-gradient(40% 40% at 92% 85%, rgba(240, 130, 90, 0.10), transparent 60%);\n  animation: dsm-aurora 24s ease-in-out infinite alternate;\n}\n\n@keyframes dsm-aurora {\n  0%   { opacity: .5; transform: translate3d(0, 0, 0) scale(1); }\n  50%  { opacity: .9; }\n  100% { opacity: .6; transform: translate3d(-1.5%, 1%, 0) scale(1.05); }\n}\n\n/* ---------- 三栏玻璃 (模糊放 ::before, 不困住 fixed 弹层) ---------- */\n[class$=\"_sidebarCol\"] {\n  position: relative;\n  border-right: 1px solid var(--dsw-alias-border-l1);\n}\n\n[class$=\"_sidebarCol\"]::before {\n  content: \"\";\n  position: absolute;\n  inset: 0;\n  z-index: -1;\n  pointer-events: none;\n  -webkit-backdrop-filter: blur(26px) saturate(170%);\n  backdrop-filter: blur(26px) saturate(170%);\n}\n\n/* 详情面板玻璃 */\n[data-slot=\"details\"] > [class$=\"_root\"] {\n  position: relative;\n}\n\n[data-slot=\"details\"] > [class$=\"_root\"]::before {\n  content: \"\";\n  position: absolute;\n  inset: 0;\n  z-index: -1;\n  pointer-events: none;\n  -webkit-backdrop-filter: blur(26px) saturate(170%);\n  backdrop-filter: blur(26px) saturate(170%);\n}\n\n/* ---------- 会话区顶栏玻璃 ---------- */\n[data-slot=\"conversation.session.header\"] [class$=\"_header\"] {\n  position: relative;\n  background: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 62%, transparent);\n  border-bottom: 1px solid var(--dsw-alias-border-l1);\n}\n\n[data-slot=\"conversation.session.header\"] [class$=\"_header\"]::before {\n  content: \"\";\n  position: absolute;\n  inset: 0;\n  z-index: -1;\n  pointer-events: none;\n  -webkit-backdrop-filter: blur(22px) saturate(160%);\n  backdrop-filter: blur(22px) saturate(160%);\n}\n\n/* ---------- 输入卡片玻璃 ---------- */\n[data-slot=\"conversation.composer\"] [class$=\"_card\"] {\n  position: relative;\n  background: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 86%, transparent);\n  border: 1px solid var(--dsw-alias-border-l2);\n  border-radius: 22px;\n  box-shadow: 0 14px 44px rgba(3, 8, 24, 0.28), 0 2px 8px rgba(3, 8, 24, 0.12);\n  transition: box-shadow .3s var(--ds-ease-in-out), border-color .3s var(--ds-ease-in-out);\n}\n\n[data-slot=\"conversation.composer\"] [class$=\"_card\"]::before {\n  content: \"\";\n  position: absolute;\n  inset: 0;\n  z-index: -1;\n  border-radius: inherit;\n  pointer-events: none;\n  -webkit-backdrop-filter: blur(28px) saturate(180%);\n  backdrop-filter: blur(28px) saturate(180%);\n}\n\n/* ---------- 设置等对话框玻璃 ---------- */\n[role=\"dialog\"][class$=\"_panel\"] {\n  background: color-mix(in srgb, var(--dsw-alias-bg-overlay) 90%, transparent);\n  border: 1px solid var(--dsw-alias-border-l2);\n  border-radius: 18px;\n  box-shadow: 0 24px 80px rgba(2, 8, 23, 0.5);\n  -webkit-backdrop-filter: blur(30px) saturate(170%);\n  backdrop-filter: blur(30px) saturate(170%);\n}\n\n[data-slot=\"conversation.composer\"] [class$=\"_card\"]:focus-within {\n  border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 55%, transparent);\n  box-shadow: 0 18px 54px rgba(3, 8, 24, 0.32),\n              0 0 0 4px color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent);\n}\n\nhtml[style*=\"color-scheme: light\"] [data-slot=\"conversation.composer\"] [class$=\"_card\"] {\n  box-shadow: 0 14px 40px rgba(146, 106, 46, 0.16), 0 2px 8px rgba(146, 106, 46, 0.10);\n}\n\n/* ---------- 发送按钮光晕 ---------- */\nbutton[aria-label=\"发送消息\"] {\n  box-shadow: 0 10px 24px rgba(217, 154, 61, 0.35);\n  transition: box-shadow .25s var(--ds-ease-in-out), transform .15s var(--ds-ease-in-out);\n}\n\nbutton[aria-label=\"发送消息\"]:hover {\n  box-shadow: 0 12px 30px rgba(217, 154, 61, 0.48);\n}\n\n/* ---------- 侧栏选中项品牌高亮 ---------- */\n[data-slot=\"sidebar\"] [class$=\"_selected\"] {\n  border-radius: 12px;\n  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent) !important;\n  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-brand-primary) 36%, transparent);\n}\n\n/* ---------- 鲸鱼 LOGO 光晕 ---------- */\n[class$=\"_headline\"] svg {\n  filter: drop-shadow(0 10px 28px var(--dsm-accent-glow));\n}\n\n/* ---------- 滚动条 ---------- */\n*::-webkit-scrollbar {\n  width: 11px;\n  height: 11px;\n}\n\n*::-webkit-scrollbar-track {\n  background: transparent;\n}\n\n*::-webkit-scrollbar-thumb {\n  background-color: color-mix(in srgb, var(--dsw-alias-label-secondary) 32%, transparent);\n  border-radius: 8px;\n  border: 3px solid transparent;\n  background-clip: padding-box;\n}\n\n*::-webkit-scrollbar-thumb:hover {\n  background-color: color-mix(in srgb, var(--dsw-alias-label-secondary) 52%, transparent);\n  background-clip: padding-box;\n}\n\n/* ---------- 键盘焦点 ---------- */\nbutton:focus-visible,\n[role=\"button\"]:focus-visible,\na:focus-visible,\ntextarea:focus-visible,\ninput:focus-visible {\n  outline: 2px solid color-mix(in srgb, var(--dsw-alias-brand-primary) 65%, transparent);\n  outline-offset: 2px;\n}\n\n/* ---------- 悬浮层玻璃 ---------- */\n[data-slot=\"shell.overlay\"] > * {\n  -webkit-backdrop-filter: blur(20px) saturate(160%);\n  backdrop-filter: blur(20px) saturate(160%);\n}\n\n/* ---------- 主题切换过渡 ---------- */\n[class$=\"_frame\"],\n[class$=\"_sidebarCol\"],\n[class$=\"_centerCol\"],\n[class$=\"_detailsCol\"],\n[data-slot=\"conversation\"] > div {\n  transition: background-color .4s var(--ds-ease-in-out), border-color .4s var(--ds-ease-in-out);\n}\n\n/* ---------- 减少动态效果 ---------- */\n@media (prefers-reduced-motion: reduce) {\n  [class$=\"_frame\"]::after {\n    animation: none;\n  }\n}\n\n/* ============================================================\n   2026 refinement pass: depth zones, dark mode, service HUD,\n   unified overlays and restrained completion interactions\n   ============================================================ */\n\n/* 三个功能区使用不同透明度，阅读区优先、背景仍可感知 */\nhtml[style*=\"color-scheme: light\"] [class$=\"_sidebarCol\"],\nhtml[style*=\"color-scheme:light\"] [class$=\"_sidebarCol\"] {\n__COL_LS__\n}\n\nhtml[style*=\"color-scheme: light\"] [class$=\"_centerCol\"],\nhtml[style*=\"color-scheme:light\"] [class$=\"_centerCol\"] {\n__COL_LC__\n}\n\nhtml[style*=\"color-scheme: light\"] [class$=\"_detailsCol\"],\nhtml[style*=\"color-scheme:light\"] [class$=\"_detailsCol\"],\nhtml[style*=\"color-scheme: light\"] [data-slot=\"details\"] > [class$=\"_root\"],\nhtml[style*=\"color-scheme:light\"] [data-slot=\"details\"] > [class$=\"_root\"] {\n__COL_LDE__\n}\n\nhtml[style*=\"color-scheme: dark\"] [class$=\"_sidebarCol\"],\nhtml[style*=\"color-scheme:dark\"] [class$=\"_sidebarCol\"] {\n__COL_DS__\n}\n\nhtml[style*=\"color-scheme: dark\"] [class$=\"_centerCol\"],\nhtml[style*=\"color-scheme:dark\"] [class$=\"_centerCol\"] {\n__COL_DC__\n}\n\nhtml[style*=\"color-scheme: dark\"] [class$=\"_detailsCol\"],\nhtml[style*=\"color-scheme:dark\"] [class$=\"_detailsCol\"],\nhtml[style*=\"color-scheme: dark\"] [data-slot=\"details\"] > [class$=\"_root\"],\nhtml[style*=\"color-scheme:dark\"] [data-slot=\"details\"] > [class$=\"_root\"] {\n__COL_DDE__\n}\n\n/* 深色模式独立调色与壁纸处理，不再只是浅色模式反相 */\nhtml[style*=\"color-scheme: dark\"] body,\nhtml[style*=\"color-scheme:dark\"] body {\n__LKDK_BG_BASE__\n__LKDK_BG_L1__\n__LKDK_BG_L2__\n__LKDK_BG_OV__\n__LKDK_LABEL_P__\n__LKDK_LABEL_PB__\n__LKDK_LABEL_PD__\n__LKDK_LABEL_S__\n__LKDK_LABEL_T__\n__LKDK_LABEL_C__\n__LKDK_LABEL_LD__\n__LKDK_B_L1__\n__LKDK_B_L2__\n__LKDK_SIDEBAR__\n}\n\nhtml[style*=\"color-scheme: dark\"] [class$=\"_frame\"]::before,\nhtml[style*=\"color-scheme:dark\"] [class$=\"_frame\"]::before {\n  filter: brightness(.55) saturate(.82) contrast(1.10);\n}\n\nhtml[style*=\"color-scheme: light\"] [class$=\"_frame\"]::before,\nhtml[style*=\"color-scheme:light\"] [class$=\"_frame\"]::before {\n  filter: brightness(.98) saturate(.96) contrast(1.02);\n}\n\n/* 本地服务状态灯：不占布局，位于沉浸式标题区 */\n.dsm-service-pill {\n  position: fixed !important;\n  z-index: 2147483000 !important;\n  top: 6px;\n  right: 112px;\n  height: 24px;\n  display: inline-flex;\n  align-items: center;\n  gap: 7px;\n  padding: 0 10px !important;\n  color: var(--dsw-alias-label-primary) !important;\n  background: color-mix(in srgb, var(--dsw-alias-bg-overlay) 88%, transparent) !important;\n  border: 1px solid color-mix(in srgb, var(--dsm-mint) 30%, transparent) !important;\n  border-radius: 999px !important;\n  box-shadow: 0 6px 20px rgba(33, 26, 25, .16) !important;\n  -webkit-backdrop-filter: blur(18px) saturate(160%);\n  backdrop-filter: blur(18px) saturate(160%);\n  font-size: 11px;\n  font-weight: 750;\n  line-height: 1;\n}\n\n.dsm-service-pill:hover {\n  transform: translateY(0) scale(1.03) !important;\n  border-color: var(--dsm-coral) !important;\n}\n\n.dsm-service-dot {\n  width: 8px;\n  height: 8px;\n  border-radius: 50%;\n  background: var(--dsm-sun);\n  box-shadow: 0 0 0 4px color-mix(in srgb, var(--dsm-sun) 20%, transparent);\n}\n\n.dsm-service-pill[data-state=\"online\"] .dsm-service-dot {\n  background: var(--dsm-mint);\n  box-shadow: 0 0 0 4px color-mix(in srgb, var(--dsm-mint) 20%, transparent);\n}\n\n.dsm-service-pill[data-state=\"offline\"] .dsm-service-dot {\n  background: var(--dsm-coral);\n  box-shadow: 0 0 0 4px color-mix(in srgb, var(--dsm-coral) 22%, transparent);\n  animation: dsm-status-pulse 1.2s ease-in-out infinite alternate;\n}\n\n@keyframes dsm-status-pulse {\n  from { opacity: .58; transform: scale(.86); }\n  to { opacity: 1; transform: scale(1.08); }\n}\n\n/* 发送后的小吉祥物反馈，不拦截任何点击 */\n.dsm-send-pop {\n  position: fixed;\n  z-index: 2147482999;\n  width: 38px;\n  height: 38px;\n  margin: -19px 0 0 -19px;\n  pointer-events: none;\n  border-radius: 13px;\n  background: var(--dsm-mascot-ui) center / cover no-repeat;\n  border: 2px solid rgba(255,255,255,.92);\n  box-shadow: 3px 4px 0 var(--dsm-sun), 0 10px 24px rgba(33,26,25,.22);\n  animation: dsm-send-float .9s cubic-bezier(.2,.8,.2,1) forwards;\n}\n\n@keyframes dsm-send-float {\n  0% { opacity: 0; transform: translateY(8px) scale(.72) rotate(-5deg); }\n  28% { opacity: 1; transform: translateY(-8px) scale(1.04) rotate(3deg); }\n  100% { opacity: 0; transform: translateY(-42px) scale(.88) rotate(0); }\n}\n\n/* 对话、轨迹与侧栏选中状态使用同一动效语言 */\n[role=\"tab\"],\n[data-slot=\"sidebar\"] [class$=\"_selected\"] {\n  transition: color .18s ease, background-color .18s ease, box-shadow .18s ease, transform .18s ease;\n}\n\n[role=\"tab\"][aria-selected=\"true\"] {\n  text-shadow: 0 1px 0 color-mix(in srgb, var(--dsm-sun) 48%, transparent);\n}\n\n[data-slot=\"sidebar\"] [class$=\"_selected\"]:hover {\n  transform: translateX(2px);\n}\n\n/* 设置、菜单、模型选择与详情面板统一为一套玻璃卡片 */\n[role=\"dialog\"] {\n  color: var(--dsw-alias-label-primary) !important;\n}\n\n[role=\"dialog\"][class$=\"_panel\"],\n[role=\"dialog\"] > [class$=\"_panel\"],\n[data-slot=\"shell.overlay\"] [role=\"dialog\"] {\n  background: color-mix(in srgb, var(--dsw-alias-bg-overlay) 96%, transparent) !important;\n  border: 1.5px solid color-mix(in srgb, var(--dsm-mint) 30%, var(--dsw-alias-border-l2)) !important;\n  border-radius: 24px !important;\n  box-shadow: 0 28px 90px rgba(20, 16, 16, .42), 6px 7px 0 color-mix(in srgb, var(--dsm-sun) 30%, transparent) !important;\n}\n\n[role=\"menu\"],\n[role=\"listbox\"],\n[data-slot=\"shell.overlay\"] > [class*=\"_menu\"],\n[data-slot=\"shell.overlay\"] > [class*=\"_popover\"] {\n  color: var(--dsw-alias-label-primary) !important;\n  background: color-mix(in srgb, var(--dsw-alias-bg-overlay) 97%, transparent) !important;\n  border: 1px solid color-mix(in srgb, var(--dsm-mint) 28%, var(--dsw-alias-border-l2)) !important;\n  border-radius: 16px !important;\n  box-shadow: 0 18px 54px rgba(20,16,16,.34), 3px 4px 0 color-mix(in srgb, var(--dsm-sun) 26%, transparent) !important;\n}\n\n[role=\"dialog\"] button,\n[role=\"menu\"] button,\n[role=\"listbox\"] button,\n[role=\"option\"] {\n  min-height: 32px;\n  border-radius: 10px !important;\n}\n\n[role=\"menuitem\"]:hover,\n[role=\"option\"]:hover,\n[role=\"option\"][aria-selected=\"true\"] {\n  color: var(--dsw-alias-label-primary) !important;\n  background: color-mix(in srgb, var(--dsm-mint) 22%, var(--dsw-alias-bg-layer-1)) !important;\n}\n\n[data-slot=\"details\"] > [class$=\"_root\"] {\n  border-left: 1px solid color-mix(in srgb, var(--dsm-mint) 28%, var(--dsw-alias-border-l2)) !important;\n}\n\n[data-slot=\"details\"] [class$=\"_header\"] {\n  min-height: 48px;\n  background: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 76%, transparent) !important;\n}\n\n[data-slot=\"details\"] [class$=\"_body\"] {\n  color: var(--dsw-alias-label-primary) !important;\n}\n\n@media (prefers-reduced-motion: reduce) {\n  .dsm-service-pill[data-state=\"offline\"] .dsm-service-dot,\n  .dsm-send-pop { animation: none; }\n  [data-slot=\"sidebar\"] [class$=\"_selected\"]:hover { transform: none; }\n}\n\n/* ============================================================\n   DeepSeek App 专用: 原生窗口半透明 (WKWebView 透明底)\n   ============================================================ */\n\nhtml,\nbody {\n  background: transparent !important;\n}\n\n/* 网页自身的壁纸层改走 ::before, 半透明让桌面毛玻璃透出 */\n[class$=\"_frame\"] {\n  background-image: none !important;\n  background-color: transparent !important;\n}\n\n[class$=\"_frame\"]::before {\n  content: \"\";\n  position: absolute;\n  inset: 0;\n  z-index: -1;\n  pointer-events: none;\n  background-image: var(--dsm-veil), var(--dsm-wall);\n  background-size: cover, cover;\n  background-position: center, center;\n  background-repeat: no-repeat, no-repeat;\n  opacity: 0.45;\n}\n\n/* 透明窗口上减弱侧栏底色, 突出穿透感 */\nhtml[style*=\"color-scheme: dark\"] body,\nhtml[style*=\"color-scheme:dark\"] body {\n  --dsw-specific-sidebar-fill: rgba(18, 30, 30, 0.36) !important;\n}\n\nhtml[style*=\"color-scheme: light\"] body,\nhtml[style*=\"color-scheme:light\"] body {\n  --dsw-specific-sidebar-fill: rgba(255, 250, 238, 0.42) !important;\n}\n\n/* ============================================================\n   Retro manga pop theme — derived from the user's reference art\n   ============================================================ */\n\n:root {\n__WALL__\n  --dsm-wall-dark: var(--dsm-reference-wall);\n  --dsm-wall-light: var(--dsm-reference-wall);\n__CORAL__\n__SUN__\n__MINT__\n__SLATE__\n__INK__\n__CREAM__\n}\n\nhtml[style*=\"color-scheme: dark\"] body,\nhtml[style*=\"color-scheme:dark\"] body {\n__DK_BG_BASE__\n__DK_BG_L1__\n__DK_BG_L2__\n__DK_BG_OV__\n__DK_B_L1__\n__DK_B_L2__\n  --dsw-alias-brand-primary: var(--dsm-coral) !important;\n__DK_LABEL_P__\n__DK_LABEL_PB__\n__DK_LABEL_PD__\n__DK_LABEL_S__\n__DK_LABEL_T__\n__DK_LABEL_C__\n__DK_LABEL_LD__\n__DK_ERR__\n  --dsw-alias-state-success-primary: var(--dsm-mint) !important;\n  --dsw-alias-state-warn-primary: var(--dsm-sun) !important;\n__DK_SIDEBAR__\n__DK_VEIL__\n__DK_GLOW__\n}\n\nhtml[style*=\"color-scheme: light\"] body,\nhtml[style*=\"color-scheme:light\"] body {\n__LT_BG_BASE__\n__LT_BG_L1__\n__LT_BG_L2__\n__LT_BG_OV__\n__LT_B_L1__\n__LT_B_L2__\n__LT_BRAND__\n__LT_LABEL_P__\n__LT_LABEL_PB__\n__LT_LABEL_PD__\n__LT_LABEL_S__\n__LT_LABEL_T__\n__LT_LABEL_C__\n__LT_LABEL_LD__\n__LT_ERR__\n__LT_OK__\n__LT_WARN__\n__LT_SIDEBAR__\n__LT_VEIL__\n__LT_GLOW__\n}\n\n[class$=\"_frame\"]::before {\n  background-position: center;\n  opacity: 1;\n  filter: saturate(1.12) contrast(1.05);\n}\n\n/* macOS 全尺寸内容窗口：给红黄绿按钮留出可点击区域，背景继续铺到最顶端 */\n[class$=\"_frame\"] {\n  box-sizing: border-box;\n  padding-top: 30px !important;\n}\n\n[class$=\"_frame\"]::after {\n  background:\n    radial-gradient(42% 36% at 86% 14%, rgba(245, 220, 38, 0.18), transparent 64%),\n    radial-gradient(36% 34% at 10% 90%, rgba(243, 107, 80, 0.18), transparent 64%),\n    radial-gradient(30% 30% at 92% 86%, rgba(98, 232, 211, 0.13), transparent 64%);\n}\n\n[data-slot=\"conversation.composer\"] [class$=\"_card\"] {\n  border: 2px solid color-mix(in srgb, var(--dsw-alias-brand-primary) 34%, transparent);\n  border-radius: 18px;\n  box-shadow:\n    5px 6px 0 color-mix(in srgb, var(--dsm-ink) 36%, transparent),\n    0 18px 44px rgba(33, 26, 25, 0.22);\n}\n\n[data-slot=\"conversation.composer\"] [class$=\"_card\"]:focus-within {\n  border-color: var(--dsw-alias-brand-primary);\n  box-shadow:\n    4px 5px 0 color-mix(in srgb, var(--dsm-sun) 65%, transparent),\n    0 18px 48px rgba(33, 26, 25, 0.28);\n}\n\nbutton[aria-label=\"发送消息\"] {\n  background: var(--dsm-coral) !important;\n  border: 2px solid color-mix(in srgb, var(--dsm-ink) 74%, transparent);\n  box-shadow: 3px 4px 0 var(--dsm-sun);\n}\n\n[data-slot=\"sidebar\"] [class$=\"_selected\"] {\n  background: color-mix(in srgb, var(--dsm-mint) 18%, transparent) !important;\n  box-shadow:\n    inset 4px 0 0 var(--dsm-coral),\n    inset 0 0 0 1px color-mix(in srgb, var(--dsm-ink) 28%, transparent);\n}\n\n*::-webkit-scrollbar-thumb {\n  background-color: color-mix(in srgb, var(--dsm-coral) 58%, transparent);\n}\n\n::selection {\n  color: var(--dsm-ink);\n  background: color-mix(in srgb, var(--dsm-sun) 72%, transparent);\n}\n\n/* ============================================================\n   Cute mascot icon system + pop-art button language\n   ============================================================ */\n\n:root {\n__MASCOT__\n  --dsm-candy-cream: rgba(255, 244, 219, 0.88);\n  --dsm-candy-dark: rgba(42, 37, 35, 0.86);\n  --dsm-button-outline: color-mix(in srgb, var(--dsm-ink) 58%, transparent);\n}\n\n/* 全局交互手感 */\nbutton {\n  font-weight: 700;\n  transition:\n    transform .16s ease,\n    background-color .18s ease,\n    border-color .18s ease,\n    box-shadow .18s ease,\n    color .18s ease,\n    filter .18s ease;\n}\n\nbutton:not(:disabled):hover {\n  transform: translateY(-1px);\n}\n\nbutton:not(:disabled):active {\n  transform: translateY(1px) scale(.98);\n}\n\nbutton svg:not([viewBox=\"0 0 182 24\"]) {\n  color: var(--dsm-coral);\n  filter: drop-shadow(0 1px 0 color-mix(in srgb, var(--dsm-sun) 46%, transparent));\n}\n\nbutton svg [stroke]:not([stroke=\"none\"]) {\n  stroke-width: 2.15;\n}\n\nbutton:focus-visible {\n  outline: 3px solid color-mix(in srgb, var(--dsm-mint) 72%, transparent);\n  outline-offset: 3px;\n}\n\n/* 顶部品牌：用少年头像替换原 DeepSeek 横向 SVG */\n[data-slot=\"sidebar\"] button[class*=\"_brand\"] {\n  min-height: 58px;\n  padding: 7px 10px !important;\n  justify-content: flex-start;\n  gap: 10px;\n  overflow: visible;\n  color: var(--dsw-alias-label-primary);\n  background: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 76%, transparent) !important;\n  border: 2px solid color-mix(in srgb, var(--dsm-mint) 42%, transparent) !important;\n  border-radius: 17px !important;\n  box-shadow: 4px 5px 0 color-mix(in srgb, var(--dsm-sun) 74%, transparent);\n}\n\n[data-slot=\"sidebar\"] button[class*=\"_brand\"] [class*=\"_brandMark\"],\n[data-slot=\"sidebar\"] button[class*=\"_brand\"] [class*=\"_brandName\"],\n[data-slot=\"sidebar\"] button[class*=\"_brand\"] > svg {\n  display: none !important;\n}\n\n[data-slot=\"sidebar\"] button[class*=\"_brand\"]::before {\n  content: \"\";\n  flex: 0 0 43px;\n  width: 43px;\n  height: 43px;\n  border-radius: 14px;\n  background: var(--dsm-mascot-ui) center / cover no-repeat;\n  border: 2px solid color-mix(in srgb, var(--dsm-ink) 65%, transparent);\n  box-shadow: 2px 3px 0 var(--dsm-coral);\n}\n\n/* 品牌行只保留吉祥物头像, 移除 \"DeepSeek\" 字样 */\n[data-slot=\"sidebar\"] button[class*=\"_brand\"]::after {\n  content: none;\n}\n\n[data-slot=\"sidebar\"] button[class*=\"_brand\"]:hover {\n  border-color: var(--dsm-mint) !important;\n  box-shadow: 5px 6px 0 color-mix(in srgb, var(--dsm-coral) 82%, transparent);\n}\n\n/* 新会话欢迎区的鲸鱼替换成同一少年吉祥物 */\n[class$=\"_fishHitbox\"] {\n  width: 66px !important;\n  height: 66px !important;\n  border-radius: 21px;\n  background: var(--dsm-mascot-ui) center / cover no-repeat;\n  border: 2px solid var(--dsm-button-outline);\n  box-shadow: 4px 5px 0 var(--dsm-sun), 0 10px 28px rgba(33, 26, 25, .22);\n}\n\n[class$=\"_fishHitbox\"] svg {\n  display: none !important;\n}\n\n[class$=\"_heroGlow\"] {\n  color: var(--dsm-sun) !important;\n  opacity: .24 !important;\n  filter: hue-rotate(128deg) saturate(1.5);\n}\n\n/* 通用图标按钮底板 */\nbutton[class*=\"_iconButton\"],\nbutton[class*=\"_searchButton\"],\nbutton[class$=\"_action\"],\nbutton[class$=\"_close\"],\nbutton[aria-label=\"命令\"] {\n  border: 1.5px solid var(--dsm-button-outline) !important;\n  border-radius: 10px !important;\n  background: color-mix(in srgb, var(--dsm-mint) 24%, var(--dsw-alias-bg-layer-1)) !important;\n  box-shadow: 2px 3px 0 color-mix(in srgb, var(--dsm-sun) 68%, transparent);\n}\n\nbutton[class*=\"_iconButton\"]:hover,\nbutton[class*=\"_searchButton\"]:hover,\nbutton[class$=\"_action\"]:hover,\nbutton[class$=\"_close\"]:hover,\nbutton[aria-label=\"命令\"]:hover {\n  background: color-mix(in srgb, var(--dsm-mint) 42%, var(--dsw-alias-bg-layer-1)) !important;\n  border-color: var(--dsm-coral) !important;\n  box-shadow: 3px 4px 0 var(--dsm-sun);\n}\n\n/* 主要动作按钮 */\nbutton[aria-label=\"新建会话\"],\nbutton[aria-label=\"添加工作区\"],\nbutton[aria-label=\"发送消息\"] {\n  color: var(--dsm-ink) !important;\n  background: var(--dsm-coral) !important;\n  border: 2px solid var(--dsm-button-outline) !important;\n  border-radius: 13px !important;\n  box-shadow: 3px 4px 0 var(--dsm-sun) !important;\n}\n\nbutton[aria-label=\"新建会话\"] svg,\nbutton[aria-label=\"添加工作区\"] svg,\nbutton[aria-label=\"发送消息\"] svg {\n  color: var(--dsm-ink) !important;\n  filter: none;\n}\n\nbutton[aria-label=\"新建会话\"]:hover,\nbutton[aria-label=\"添加工作区\"]:hover,\nbutton[aria-label=\"发送消息\"]:hover {\n  background: color-mix(in srgb, var(--dsm-coral) 80%, var(--dsm-sun)) !important;\n  box-shadow: 4px 5px 0 var(--dsm-mint) !important;\n}\n\nbutton[aria-label=\"发送消息\"] {\n  border-radius: 50% !important;\n}\n\n/* 顶栏、模型和权限选择器 */\n[data-slot=\"conversation.session.header\"] button,\n[data-slot=\"conversation.input.dock\"] button:not([aria-label=\"发送消息\"]),\n[data-slot=\"conversation.composer.bar\"] button:not([aria-label=\"发送消息\"]) {\n  border-radius: 11px;\n}\n\n[data-slot=\"conversation.input.dock\"] button:not([aria-label=\"发送消息\"]),\n[data-slot=\"conversation.composer.bar\"] button:not([aria-label=\"发送消息\"]) {\n  background: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 78%, transparent);\n  border: 1px solid color-mix(in srgb, var(--dsm-mint) 34%, transparent);\n}\n\n[data-slot=\"conversation.input.dock\"] button:not([aria-label=\"发送消息\"]):hover,\n[data-slot=\"conversation.composer.bar\"] button:not([aria-label=\"发送消息\"]):hover {\n  background: color-mix(in srgb, var(--dsm-sun) 20%, var(--dsw-alias-bg-layer-1));\n  border-color: var(--dsm-coral);\n  box-shadow: 0 3px 0 color-mix(in srgb, var(--dsm-mint) 64%, transparent);\n}\n\nbutton[aria-label^=\"访问模式\"] svg,\nbutton[aria-label^=\"选择模型\"] svg,\nbutton[aria-label^=\"上下文已用\"] svg {\n  color: var(--dsm-mint) !important;\n}\n\n/* 侧栏文件夹、箭头和会话操作 */\n[data-slot=\"sidebar\"] svg:not([viewBox=\"0 0 182 24\"]) {\n  color: var(--dsm-coral);\n}\n\n[data-slot=\"sidebar\"] [class$=\"_folder\"],\n[data-slot=\"sidebar\"] [class*=\"_folderActive\"] {\n  color: var(--dsm-coral) !important;\n  filter: drop-shadow(1px 2px 0 color-mix(in srgb, var(--dsm-sun) 68%, transparent));\n}\n\n[data-slot=\"sidebar\"] [class*=\"_chevron\"],\n[data-slot=\"sidebar\"] [class*=\"_arrow\"] {\n  color: var(--dsm-mint) !important;\n  filter: none;\n}\n\n[data-slot=\"sidebar\"] button[aria-label$=\"的操作\"] {\n  background: color-mix(in srgb, var(--dsm-sun) 28%, var(--dsw-alias-bg-layer-1)) !important;\n}\n\n[data-slot=\"sidebar\"] button[aria-label^=\"在\"] {\n  background: color-mix(in srgb, var(--dsm-mint) 28%, var(--dsw-alias-bg-layer-1)) !important;\n}\n\n[data-slot=\"sidebar\"] button[aria-label=\"设置\"] {\n  margin: 5px 7px 8px;\n  padding: 9px 12px;\n  border: 1.5px solid color-mix(in srgb, var(--dsm-coral) 52%, transparent);\n  border-radius: 13px;\n  background: color-mix(in srgb, var(--dsm-sun) 16%, var(--dsw-alias-bg-layer-1));\n  box-shadow: 2px 3px 0 color-mix(in srgb, var(--dsm-mint) 54%, transparent);\n}\n\n/* 消息底部复制、赞踩、分支按钮 */\nbutton[aria-label=\"复制\"] {\n  background: color-mix(in srgb, var(--dsm-mint) 34%, var(--dsw-alias-bg-layer-1)) !important;\n}\n\nbutton[aria-label=\"好的回答\"] {\n  background: color-mix(in srgb, var(--dsm-sun) 40%, var(--dsw-alias-bg-layer-1)) !important;\n}\n\nbutton[aria-label=\"有问题的回答\"] {\n  background: color-mix(in srgb, var(--dsm-coral) 28%, var(--dsw-alias-bg-layer-1)) !important;\n}\n\nbutton[aria-label=\"在新对话中分支\"] {\n  background: color-mix(in srgb, var(--dsm-coral) 20%, var(--dsw-alias-bg-layer-1)) !important;\n}\n\n/* 工具调用、文件按钮和普通文本按钮 */\n[data-slot=\"conversation.session\"] button:not(:has(svg)) {\n  border-radius: 10px;\n}\n\n[data-slot=\"conversation.session\"] button:not(:has(svg)):hover {\n  background: color-mix(in srgb, var(--dsm-mint) 12%, transparent);\n  box-shadow: inset 3px 0 0 var(--dsm-coral);\n}\n\n[data-slot=\"conversation.session\"] button[class*=\"_file\"],\n[data-slot=\"conversation.session\"] button[class*=\"_fileLink\"] {\n  color: color-mix(in srgb, var(--dsw-alias-label-primary) 82%, var(--dsm-coral));\n  background: color-mix(in srgb, var(--dsm-sun) 16%, var(--dsw-alias-bg-layer-1));\n  border: 1px solid color-mix(in srgb, var(--dsm-coral) 36%, transparent);\n  border-radius: 9px;\n  padding-inline: 7px;\n}\n\n/* 设置弹窗：图标导航、选择器、主题按钮 */\n[role=\"dialog\"] button,\n[data-slot=\"shell.overlay\"] button {\n  border-radius: 11px;\n}\n\n[role=\"dialog\"] button svg,\n[data-slot=\"shell.overlay\"] button svg {\n  color: var(--dsm-coral);\n}\n\n[role=\"dialog\"] button[class*=\"_navCell\"],\n[data-slot=\"shell.overlay\"] button[class*=\"_navCell\"] {\n  border: 1px solid transparent;\n  padding: 9px 12px;\n}\n\n[role=\"dialog\"] button[class*=\"_navCell\"]:hover,\n[data-slot=\"shell.overlay\"] button[class*=\"_navCell\"]:hover {\n  background: color-mix(in srgb, var(--dsm-mint) 18%, transparent);\n  border-color: color-mix(in srgb, var(--dsm-mint) 48%, transparent);\n}\n\n[role=\"dialog\"] button[class*=\"_navCell\"][class*=\"_active\"],\n[data-slot=\"shell.overlay\"] button[class*=\"_navCell\"][class*=\"_active\"] {\n  background: color-mix(in srgb, var(--dsm-mint) 24%, var(--dsw-alias-bg-layer-1)) !important;\n  border-color: var(--dsm-coral);\n  box-shadow: inset 4px 0 0 var(--dsm-coral), 2px 3px 0 color-mix(in srgb, var(--dsm-sun) 54%, transparent);\n}\n\n[role=\"dialog\"] button[class*=\"_selector\"],\n[data-slot=\"shell.overlay\"] button[class*=\"_selector\"] {\n  background: color-mix(in srgb, var(--dsm-mint) 14%, var(--dsw-alias-bg-layer-1));\n  border: 1.5px solid color-mix(in srgb, var(--dsm-mint) 44%, transparent);\n  box-shadow: 0 3px 0 color-mix(in srgb, var(--dsm-sun) 40%, transparent);\n}\n\n[role=\"dialog\"] button[class*=\"_themeCube\"],\n[data-slot=\"shell.overlay\"] button[class*=\"_themeCube\"] {\n  border: 2px solid color-mix(in srgb, var(--dsm-coral) 36%, transparent) !important;\n  background: color-mix(in srgb, var(--dsm-sun) 10%, var(--dsw-alias-bg-layer-1));\n  box-shadow: 3px 4px 0 color-mix(in srgb, var(--dsm-mint) 34%, transparent);\n}\n\n[role=\"dialog\"] button[class*=\"_themeCube\"][aria-pressed=\"true\"],\n[data-slot=\"shell.overlay\"] button[class*=\"_themeCube\"][aria-pressed=\"true\"] {\n  border-color: var(--dsm-coral) !important;\n  background: color-mix(in srgb, var(--dsm-mint) 28%, var(--dsw-alias-bg-layer-1)) !important;\n  box-shadow: inset 5px 0 0 var(--dsm-coral), 4px 5px 0 var(--dsm-sun);\n}\n\n/* 深色模式下让糖果底板仍保持对比度 */\nhtml[style*=\"color-scheme: dark\"] button[class*=\"_iconButton\"],\nhtml[style*=\"color-scheme:dark\"] button[class*=\"_iconButton\"],\nhtml[style*=\"color-scheme: dark\"] button[class$=\"_action\"],\nhtml[style*=\"color-scheme:dark\"] button[class$=\"_action\"] {\n  color: var(--dsm-cream);\n}\n\n@media (prefers-reduced-motion: reduce) {\n  button {\n    transition: none;\n  }\n\n  button:not(:disabled):hover,\n  button:not(:disabled):active {\n    transform: none;\n  }\n}\n\n/* ============================================================\n   Readability + immersive mascot interactions\n   ============================================================ */\n\n/* 只移除欢迎页装饰文案，不影响头像、工作区或输入框 */\n[class$=\"_headlineText\"],\n[class$=\"_previewBadge\"] {\n  display: none !important;\n}\n\n[class$=\"_headline\"] {\n  grid-template-columns: 66px !important;\n  min-height: 70px;\n}\n\n/* 为聊天正文加局部阅读玻璃；背景仍透出，文字保持清楚 */\n[data-slot=\"conversation.session\"] {\n__READ_LP__\n__READ_LS__\n}\n\n[data-slot=\"conversation.session\"] > [class$=\"_viewArea\"] {\n  isolation: isolate;\n  position: relative;\n}\n\n[data-slot=\"conversation.session\"] > [class$=\"_viewArea\"]::before {\n  content: \"\";\n  position: absolute;\n  inset: 0;\n  z-index: 0;\n  pointer-events: none;\n  opacity: 1;\n__READ_GRAD_L__\n  -webkit-backdrop-filter: blur(2px) saturate(.88);\n  backdrop-filter: blur(2px) saturate(.88);\n  transition: opacity .2s ease, backdrop-filter .2s ease;\n}\n\n[data-slot=\"conversation.session\"] > [class$=\"_viewArea\"] > * {\n  position: relative;\n  z-index: 1;\n}\n\nhtml[style*=\"color-scheme: dark\"] [data-slot=\"conversation.session\"] > [class$=\"_viewArea\"]::before,\nhtml[style*=\"color-scheme:dark\"] [data-slot=\"conversation.session\"] > [class$=\"_viewArea\"]::before {\n__READ_GRAD_D__\n}\n\nhtml[style*=\"color-scheme: dark\"] [data-slot=\"conversation.session\"],\nhtml[style*=\"color-scheme:dark\"] [data-slot=\"conversation.session\"] {\n__DK_LABEL_P__\n__DK_LABEL_S__\n}\n\nhtml.dsm-is-scrolling [data-slot=\"conversation.session\"] > [class$=\"_viewArea\"]::before {\n  opacity: 1;\n  -webkit-backdrop-filter: blur(3px);\n  backdrop-filter: blur(3px);\n}\n\n/* 指针柔光由 interactions.js 更新，不捕获鼠标事件 */\n[class$=\"_frame\"]::after {\n  background:\n__PG_MINT__\n__PG_SUN__\n__PG_CORAL__\n}\n\n/* 按钮点击波纹与头像轻互动 */\nbutton[data-dsm-interactive] {\n  position: relative;\n  isolation: isolate;\n  overflow: hidden;\n}\n\n.dsm-ripple {\n  position: absolute;\n  z-index: -1;\n  width: 18px;\n  height: 18px;\n  margin: -9px 0 0 -9px;\n  pointer-events: none;\n  border-radius: 50%;\n  background: color-mix(in srgb, var(--dsm-mint) 62%, var(--dsm-sun));\n  opacity: .72;\n  animation: dsm-ripple-pop .55s ease-out forwards;\n}\n\n@keyframes dsm-ripple-pop {\n  from { transform: scale(0); opacity: .72; }\n  to { transform: scale(13); opacity: 0; }\n}\n\n[data-slot=\"sidebar\"] button[class*=\"_brand\"]::before,\n[class$=\"_fishHitbox\"] {\n  transform: perspective(420px) rotateX(var(--dsm-tilt-x, 0deg)) rotateY(var(--dsm-tilt-y, 0deg));\n  transform-origin: center;\n  transition: transform .18s ease, box-shadow .18s ease;\n}\n\n[data-slot=\"sidebar\"] button[class*=\"_brand\"]:hover::before,\n[class$=\"_fishHitbox\"]:hover {\n  box-shadow: 4px 6px 0 var(--dsm-coral), 0 12px 30px rgba(33, 26, 25, .24);\n}\n\n@media (prefers-reduced-motion: reduce) {\n  .dsm-ripple { display: none; }\n  [data-slot=\"sidebar\"] button[class*=\"_brand\"]::before,\n  [class$=\"_fishHitbox\"] { transform: none !important; transition: none; }\n  html.dsm-is-scrolling [data-slot=\"conversation.session\"] > [class$=\"_viewArea\"]::before {\n    -webkit-backdrop-filter: none;\n    backdrop-filter: none;\n  }\n}\n\n/* 最终级联锁：确保新版深浅配色与三栏层级覆盖历史主题规则 */\nhtml[style*=\"color-scheme: dark\"] body,\nhtml[style*=\"color-scheme:dark\"] body {\n__LKDK_BG_BASE__\n__LKDK_BG_L1__\n__LKDK_BG_L2__\n__LKDK_BG_OV__\n__LKDK_LABEL_P__\n__LKDK_LABEL_PB__\n__LKDK_LABEL_PD__\n__LKDK_LABEL_S__\n__LKDK_LABEL_T__\n__LKDK_LABEL_C__\n__LKDK_LABEL_LD__\n__LKDK_B_L1__\n__LKDK_B_L2__\n__LKDK_SIDEBAR__\n}\n\nhtml[style*=\"color-scheme: light\"] body,\nhtml[style*=\"color-scheme:light\"] body {\n__LKLT_BG_BASE__\n__LKLT_BG_L1__\n__LKLT_BG_L2__\n__LKLT_BG_OV__\n__LT_LABEL_P__\n__LT_LABEL_PB__\n__LT_LABEL_PD__\n__LT_LABEL_S__\n__LT_LABEL_T__\n__LT_LABEL_C__\n__LT_LABEL_LD__\n__LKLT_SIDEBAR__\n}\n\nhtml[style*=\"color-scheme: light\"] [class$=\"_sidebarCol\"],\nhtml[style*=\"color-scheme:light\"] [class$=\"_sidebarCol\"] {\n__COL_LS__\n}\n\nhtml[style*=\"color-scheme: light\"] [class$=\"_centerCol\"],\nhtml[style*=\"color-scheme:light\"] [class$=\"_centerCol\"] {\n__COL_LC__\n}\n\nhtml[style*=\"color-scheme: light\"] [class$=\"_detailsCol\"],\nhtml[style*=\"color-scheme:light\"] [class$=\"_detailsCol\"],\nhtml[style*=\"color-scheme: light\"] [data-slot=\"details\"] > [class$=\"_root\"],\nhtml[style*=\"color-scheme:light\"] [data-slot=\"details\"] > [class$=\"_root\"] {\n__COL_LDE__\n}\n\nhtml[style*=\"color-scheme: dark\"] [class$=\"_sidebarCol\"],\nhtml[style*=\"color-scheme:dark\"] [class$=\"_sidebarCol\"] {\n__COL_DS__\n}\n\nhtml[style*=\"color-scheme: dark\"] [class$=\"_centerCol\"],\nhtml[style*=\"color-scheme:dark\"] [class$=\"_centerCol\"] {\n__COL_DC__\n}\n\nhtml[style*=\"color-scheme: dark\"] [class$=\"_detailsCol\"],\nhtml[style*=\"color-scheme:dark\"] [class$=\"_detailsCol\"],\nhtml[style*=\"color-scheme: dark\"] [data-slot=\"details\"] > [class$=\"_root\"],\nhtml[style*=\"color-scheme:dark\"] [data-slot=\"details\"] > [class$=\"_root\"] {\n__COL_DDE__\n}\n\nhtml[style*=\"color-scheme: dark\"] [class$=\"_frame\"]::before,\nhtml[style*=\"color-scheme:dark\"] [class$=\"_frame\"]::before {\n  filter: brightness(.55) saturate(.82) contrast(1.10) !important;\n}\n\nhtml[style*=\"color-scheme: light\"] [class$=\"_frame\"]::before,\nhtml[style*=\"color-scheme:light\"] [class$=\"_frame\"]::before {\n  filter: brightness(.98) saturate(.96) contrast(1.02) !important;\n}\n\n/* 清除原生 DeepSeek 蓝：运行状态、页签、链接与信息按钮统一主题色 */\nbody {\n  --dsw-static-deepseek-500: var(--dsm-coral) !important;\n  --dsw-static-deepseek-200: var(--dsm-mint) !important;\n  --dsw-alias-state-business-primary: var(--dsm-coral) !important;\n  --dsw-alias-state-business-tertiary: color-mix(in srgb, var(--dsm-mint) 24%, transparent) !important;\n  --dsw-alias-button-info-fill: var(--dsm-coral) !important;\n  --dsw-alias-button-info-hover: color-mix(in srgb, var(--dsm-coral) 76%, var(--dsm-sun)) !important;\n}\n\n[class$=\"_turnStatus\"] {\n  background: linear-gradient(90deg,\n    var(--dsm-coral) 0%,\n    var(--dsm-coral) 38%,\n    var(--dsm-mint) 50%,\n    var(--dsm-coral) 62%,\n    var(--dsm-coral) 100%) !important;\n  color: transparent !important;\n  -webkit-text-fill-color: transparent !important;\n  -webkit-background-clip: text !important;\n  background-clip: text !important;\n}\n", "themes": {"aurora": {"label": "暗夜极光"}, "paper": {"label": "奶油纸感"}, "deepsea": {"label": "深海鲸语"}}};;
+const TOKENS = THEME_META.tokens;
+const TEMPLATE = THEME_META.template;
+
+/* ---------------- 平台桥 ----------------
+   回复通道用独立的 replyId 字段: 主题 payload 自身带 id(主题 ID),
+   若沿用同一个 id 字段会被 payload 覆盖, 导致宿主回复落空、前端永远超时。 */
+function bridgeCall(action, payload = {}) {
+  if (window.themeStudio && window.themeStudio.call) return window.themeStudio.call(action, payload);
+  return new Promise((resolve) => {
+    const id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    window.__dsmStudioReplies = window.__dsmStudioReplies || {};
+    window.__dsmStudioReplies[id] = resolve;
+    setTimeout(() => { window.__dsmStudioReplies[id] && resolve({ ok: false, error: '操作超时' }); }, 8000);
+    window.webkit.messageHandlers.dsmThemeStudio.postMessage(Object.assign({ replyId: id, action }, payload));
+  });
+}
+function closeSelf() {
+  if (window.themeStudio && window.themeStudio.close) window.themeStudio.close();
+  else if (window.webkit && window.webkit.messageHandlers.dsmThemeStudio)
+    window.webkit.messageHandlers.dsmThemeStudio.postMessage({ replyId: 'close' + Date.now(), action: 'close' });
+}
+document.getElementById('close').addEventListener('click', closeSelf);
+
+/* ---------------- 颜色工具 ---------------- */
+const hex2rgb = (h) => { h = h.replace('#',''); if (h.length===3) h = h.split('').map(c=>c+c).join(''); return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)]; };
+const rgb2hex = (r,g,b) => '#' + [r,g,b].map(v => Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join('');
+const mix = (a, b, t) => { const A = hex2rgb(a), B = hex2rgb(b); return rgb2hex(A[0]+(B[0]-A[0])*t, A[1]+(B[1]-A[1])*t, A[2]+(B[2]-A[2])*t); };
+const tint = (h, t) => mix(h, '#ffffff', t);
+const shade = (h, t) => mix(h, '#000000', t);
+const rgba = (h, a) => { const [r,g,b] = hex2rgb(h); return `rgba(${r}, ${g}, ${b}, ${a})`; };
+const alphaHex = (h, a) => { const [r,g,b] = hex2rgb(h); return `rgba(${r}, ${g}, ${b}, ${a})`; };
+
+/* ---------------- 由三个主色推导完整令牌板 ---------------- */
+function deriveTokens(accent, sun, mint, mode) {
+  const dark = mode === 'dark';
+  const ink = dark ? shade(accent, 0.78) : '#2b2620';
+  const cream = dark ? tint(accent, 0.88) : '#f7f3ea';
+  const slate = dark ? shade(accent, 0.35) : mix(accent, '#8a8172', 0.5);
+  // 深色底向中性暗色靠拢, 避免高饱和主色(橙/红等)把背景染成浑浊的棕
+  const baseInk = dark ? mix(ink, '#0e1114', 0.45) : shade(accent, 0.85);
+  const baseCream = dark ? tint(accent, 0.92) : cream;
+  const L = (a, b) => alphaHex(a, b);
+  const v = {};
+  v.coral = `  --dsm-coral: ${accent};`;
+  v.sun = `  --dsm-sun: ${sun};`;
+  v.mint = `  --dsm-mint: ${mint};`;
+  v.slate = `  --dsm-slate: ${slate};`;
+  v.ink = `  --dsm-ink: ${ink};`;
+  v.cream = `  --dsm-cream: ${cream};`;
+  v.wall = `  --dsm-reference-wall: linear-gradient(160deg, ${dark ? shade(accent,0.88) : tint(accent,0.94)} 0%, ${dark ? shade(accent,0.62) : tint(accent,0.86)} 45%, ${dark ? mix(accent, slate, 0.55) : mix(accent, '#ffffff', 0.72)} 100%);`;
+  v.mascot = `  --dsm-mascot-ui: radial-gradient(circle at 35% 30%, ${tint(accent,0.55)}, ${accent} 55%, ${shade(accent,0.35)} 100%);`;
+  // 深色板
+  v.dk_bg_base = `  --dsw-alias-bg-base: ${L(baseInk, dark?0.88:0.86)} !important;`;
+  v.dk_bg_l1 = `  --dsw-alias-bg-layer-1: ${L(dark?mix(baseInk,'#ffffff',0.05):baseInk, 0.93)} !important;`;
+  v.dk_bg_l2 = `  --dsw-alias-bg-layer-2: ${L(dark?mix(baseInk,'#ffffff',0.12):mix(baseInk,accent,0.1), 0.90)} !important;`;
+  v.dk_bg_ov = `  --dsw-alias-bg-overlay: ${L(baseInk, 0.96)} !important;`;
+  v.dk_b_l1 = `  --dsw-alias-border-l1: ${L(mint, 0.20)} !important;`;
+  v.dk_b_l2 = `  --dsw-alias-border-l2: ${L(sun, 0.30)} !important;`;
+  v.dk_label_p = `  --dsw-alias-label-primary: ${dark?mix(cream,'#ffffff',0.16):mix(baseCream,'#000000',0.02)} !important;`;
+  v.dk_label_pb = `  --dsw-alias-label-primary-bluish: ${tint(dark?cream:sun, 0.55)} !important;`;
+  v.dk_label_pd = `  --dsw-alias-label-primary-dimmed: ${mix(cream, baseInk, 0.22)} !important;`;
+  v.dk_label_s = `  --dsw-alias-label-secondary: ${mix(cream, baseInk, 0.38)} !important;`;
+  v.dk_label_t = `  --dsw-alias-label-tertiary: ${mix(cream, baseInk, 0.52)} !important;`;
+  v.dk_label_c = `  --dsw-alias-label-caption: ${mix(cream, baseInk, 0.60)} !important;`;
+  v.dk_label_ld = `  --dsw-alias-label-dimmed: ${mix(cream, baseInk, 0.68)} !important;`;
+  v.dk_err = `  --dsw-alias-state-error-primary: ${dark ? '#ff8a9a' : shade(accent, 0.02)} !important;`;
+  v.dk_sidebar = `  --dsw-specific-sidebar-fill: ${L(baseInk, 0.93)} !important;`;
+  v.dk_veil = `  --dsm-veil:\n    linear-gradient(90deg, ${L(baseInk,0.58)}, ${L(baseInk,0.42)} 52%, ${L(slate,0.30)});`;
+  v.dk_glow = `  --dsm-accent-glow: ${L(accent, 0.38)};`;
+  // 浅色板
+  v.lt_bg_base = `  --dsw-alias-bg-base: ${L(baseCream, 0.86)} !important;`;
+  v.lt_bg_l1 = `  --dsw-alias-bg-layer-1: ${L(tint(baseCream,0.25), 0.92)} !important;`;
+  v.lt_bg_l2 = `  --dsw-alias-bg-layer-2: ${L(mix(baseCream, accent, 0.10), 0.86)} !important;`;
+  v.lt_bg_ov = `  --dsw-alias-bg-overlay: ${L(tint(baseCream,0.2), 0.97)} !important;`;
+  v.lt_b_l1 = `  --dsw-alias-border-l1: ${L(slate, 0.22)} !important;`;
+  v.lt_b_l2 = `  --dsw-alias-border-l2: ${L(accent, 0.32)} !important;`;
+  v.lt_brand = `  --dsw-alias-brand-primary: ${shade(accent, 0.05)} !important;`;
+  v.lt_label_p = `  --dsw-alias-label-primary: ${ink} !important;`;
+  v.lt_label_pb = `  --dsw-alias-label-primary-bluish: ${shade(mint, 0.45)} !important;`;
+  v.lt_label_pd = `  --dsw-alias-label-primary-dimmed: ${mix(ink, baseCream, 0.25)} !important;`;
+  v.lt_label_s = `  --dsw-alias-label-secondary: ${mix(ink, baseCream, 0.38)} !important;`;
+  v.lt_label_t = `  --dsw-alias-label-tertiary: ${mix(ink, baseCream, 0.50)} !important;`;
+  v.lt_label_c = `  --dsw-alias-label-caption: ${mix(ink, baseCream, 0.55)} !important;`;
+  v.lt_label_ld = `  --dsw-alias-label-dimmed: ${mix(ink, baseCream, 0.62)} !important;`;
+  v.lt_err = `  --dsw-alias-state-error-primary: ${shade(accent, 0.08)} !important;`;
+  v.lt_ok = `  --dsw-alias-state-success-primary: ${shade(mint, 0.38)} !important;`;
+  v.lt_warn = `  --dsw-alias-state-warn-primary: ${shade(sun, 0.42)} !important;`;
+  v.lt_sidebar = `  --dsw-specific-sidebar-fill: ${L(baseCream, 0.88)} !important;`;
+  v.lt_veil = `  --dsm-veil:\n    linear-gradient(90deg, ${L(baseCream,0.32)}, ${L(baseCream,0.20)} 54%, ${L(tint(mint,0.7),0.16)});`;
+  v.lt_glow = `  --dsm-accent-glow: ${L(accent, 0.28)};`;
+  // 级联锁 = 深/浅板
+  v.lkdk_bg_base = v.dk_bg_base; v.lkdk_bg_l1 = v.dk_bg_l1; v.lkdk_bg_l2 = v.dk_bg_l2; v.lkdk_bg_ov = v.dk_bg_ov;
+  v.lkdk_label_p = v.dk_label_p; v.lkdk_label_pb = v.dk_label_pb; v.lkdk_label_pd = v.dk_label_pd;
+  v.lkdk_label_s = v.dk_label_s; v.lkdk_label_t = v.dk_label_t; v.lkdk_label_c = v.dk_label_c; v.lkdk_label_ld = v.dk_label_ld;
+  v.lkdk_b_l1 = v.dk_b_l1; v.lkdk_b_l2 = v.dk_b_l2; v.lkdk_sidebar = v.dk_sidebar;
+  v.lklt_bg_base = v.lt_bg_base; v.lklt_bg_l1 = v.lt_bg_l1; v.lklt_bg_l2 = v.lt_bg_l2; v.lklt_bg_ov = v.lt_bg_ov;
+  v.lklt_sidebar = v.lt_sidebar;
+  // 三栏
+  v.col_ls = `  background: ${L(tint(baseCream,0.15), 0.94)} !important;`;
+  v.col_lc = `  background: ${L(tint(baseCream,0.15), 0.78)} !important;`;
+  v.col_lde = `  background: ${L(tint(baseCream,0.1), 0.86)} !important;`;
+  v.col_ds = `  background: ${L(baseInk, 0.94)} !important;`;
+  v.col_dc = `  background: ${L(baseInk, 0.82)} !important;`;
+  v.col_dde = `  background: ${L(mix(baseInk,'#ffffff',0.04), 0.86)} !important;`;
+  // 阅读玻璃
+  v.read_lp = `  --dsw-alias-label-primary: ${mix(ink, baseCream, 0.08)} !important;`;
+  v.read_ls = `  --dsw-alias-label-secondary: ${mix(ink, baseCream, 0.35)} !important;`;
+  v.read_grad_l = `  background: linear-gradient(90deg,\n    ${L(tint(baseCream,0.2),0.94)} 0%,\n    ${L(tint(baseCream,0.2),0.88)} 68%,\n    ${L(tint(baseCream,0.2),0.72)} 100%);`;
+  v.read_grad_d = `  background: linear-gradient(90deg,\n    ${L(baseInk,0.90)} 0%,\n    ${L(baseInk,0.84)} 68%,\n    ${L(baseInk,0.70)} 100%);`;
+  // 指针柔光
+  v.pg_mint = `    radial-gradient(24% 26% at var(--dsm-pointer-x, 78%) var(--dsm-pointer-y, 18%), ${L(mint,0.16)}, transparent 70%),`;
+  v.pg_sun = `    radial-gradient(42% 36% at 86% 14%, ${L(sun,0.14)}, transparent 64%),`;
+  v.pg_coral = `    radial-gradient(36% 34% at 10% 90%, ${L(accent,0.14)}, transparent 64%);`;
+  return v;
+}
+
+function buildCSS(values) {
+  let out = TEMPLATE;
+  for (const t of TOKENS) {
+    if (!(t in values)) throw new Error('缺少令牌 ' + t);
+    out = out.split('__' + t.toUpperCase() + '__').join(values[t]);
+  }
+  if (out.includes('__WALL__')) out = out.split('__WALL__').join(values.wall);
+  if (out.includes('__MASCOT__')) out = out.split('__MASCOT__').join(values.mascot);
+  return out;
+}
+
+/* ---------------- 状态 ---------------- */
+let wallpaperDataURL = null;
+let mascotDataURL = null;
+let phrases = [];
+const $ = (id) => document.getElementById(id);
+
+function currentMode() { return document.querySelector('#modeSeg button.on').dataset.mode; }
+
+function refreshPreview() {
+  const accent = $('cAccent').value, sun = $('cSun').value, mint = $('cMint').value;
+  const dark = currentMode() === 'dark';
+  const t = deriveTokens(accent, sun, mint, dark ? 'dark' : 'light');
+  const grab = (line) => line.trim().replace(/^[a-z-]+:/, '').replace(/ !important;$/, '').replace(/;$/, '');
+  const frame = $('pvFrame');
+  const set = (k, val) => frame.style.setProperty(k, val);
+  set('--pv-wall', wallpaperDataURL ? `url(${wallpaperDataURL}) center/cover` : grab(t.wall));
+  set('--pv-label', grab(dark ? t.lkdk_label_p : t.lt_label_p));
+  set('--pv-label2', grab(dark ? t.lkdk_label_s : t.lt_label_s));
+  set('--pv-col', grab(dark ? t.col_ds : t.col_ls));
+  set('--pv-center', grab(dark ? t.col_dc : t.col_lc));
+  set('--pv-border', grab(dark ? t.lkdk_b_l1 : t.lt_b_l1));
+  set('--pv-border2', grab(dark ? t.lkdk_b_l2 : t.lt_b_l2));
+  set('--pv-l1', grab(dark ? t.lkdk_bg_l1 : t.lt_bg_l1));
+  set('--pv-sel', `color-mix(in srgb, ${mint} 18%, transparent)`);
+  set('--pv-accent', accent);
+  set('--pv-sun', sun);
+  set('--pv-ink', dark ? '#fff' : '#222');
+  set('--pv-read', dark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.04)');
+  set('--pv-readlabel', dark ? 'rgba(255,255,255,.88)' : 'rgba(0,0,0,.75)');
+  set('--pv-mascot', mascotDataURL
+    ? `url(${mascotDataURL}) center/cover`
+    : `radial-gradient(circle at 35% 30%, ${tint(accent,0.55)}, ${accent} 55%, ${shade(accent,0.35)} 100%)`);
+  document.documentElement.style.setProperty('--accent', accent);
+}
+
+/* ---------------- 交互 ---------------- */
+['cAccent','cSun','cMint'].forEach(id => $(id).addEventListener('input', refreshPreview));
+$('modeSeg').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+  $('modeSeg').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+  refreshPreview();
+}));
+$('name').addEventListener('input', refreshPreview);
+
+$('pickWall').addEventListener('click', () => $('wallFile').click());
+$('wallFile').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const dataURL = await compressImage(file, 1600, 0.82);
+    wallpaperDataURL = dataURL;
+    const box = $('wallbox');
+    box.innerHTML = `<img src="${dataURL}" alt=""><div class="row"><button class="mini" id="clearWall">移除图片</button></div>`;
+    box.querySelector('#clearWall').addEventListener('click', () => { wallpaperDataURL = null; resetWallbox(); refreshPreview(); });
+    refreshPreview();
+  } catch (err) { setStatus('图片处理失败：' + err.message, true); }
+});
+function resetWallbox() {
+  $('wallbox').innerHTML = `<div class="hint">上传一张喜欢的图片作为主题壁纸<br>支持 JPG / PNG，自动压缩</div>
+    <div class="row" style="margin-top:8px"><button class="mini" id="pickWall">上传图片</button></div>`;
+  $('wallbox').querySelector('#pickWall').addEventListener('click', () => $('wallFile').click());
+}
+
+$('pickMascot').addEventListener('click', () => $('mascotFile').click());
+$('mascotFile').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const dataURL = await compressImage(file, 512, 0.9);
+    mascotDataURL = dataURL;
+    const box = $('mascotBox');
+    box.innerHTML = `<img src="${dataURL}" alt="" style="max-height:96px"><div class="row"><button class="mini" id="clearMascot">移除图片</button></div>`;
+    box.querySelector('#clearMascot').addEventListener('click', () => { mascotDataURL = null; resetMascotBox(); refreshPreview(); });
+    refreshPreview();
+  } catch (err) { setStatus('图片处理失败：' + err.message, true); }
+});
+function resetMascotBox() {
+  $('mascotBox').innerHTML = `<div class="hint">上传吉祥物图片，用作侧栏头像、欢迎页形象<br>以及桌面小宠物和应用图标 · 建议方形 PNG</div>
+    <div class="row" style="margin-top:8px"><button class="mini" id="pickMascot">上传图片</button></div>`;
+  $('mascotBox').querySelector('#pickMascot').addEventListener('click', () => $('mascotFile').click());
+}
+function compressImage(file, maxDim, quality) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('无法读取图片')); };
+    img.src = url;
+  });
+}
+
+$('phraseInput').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  const v = e.target.value.trim();
+  if (!v) return;
+  if (phrases.includes(v)) { e.target.value = ''; return; }
+  if (phrases.length >= 8) { setStatus('最多 8 句口头禅', true); return; }
+  phrases.push(v);
+  e.target.value = '';
+  renderPhrases();
+});
+function renderPhrases() {
+  $('phraseList').innerHTML = phrases.map((p, i) =>
+    `<span class="chip">${p.replace(/</g,'&lt;')}<b data-i="${i}">×</b></span>`).join('');
+  $('phraseList').querySelectorAll('b').forEach(b => b.addEventListener('click', () => {
+    phrases.splice(+b.dataset.i, 1); renderPhrases();
+  }));
+}
+
+const PRESETS = [
+  { name: '正太', accent: '#f36b50', sun: '#f5dc26', mint: '#62e8d3', mode: 'dark' },
+  { name: '暗夜极光', accent: '#8b7cf6', sun: '#4cc9f0', mint: '#55d8c2', mode: 'dark' },
+  { name: '奶油纸感', accent: '#e07856', sun: '#e8b04b', mint: '#6fae9e', mode: 'light' },
+  { name: '深海鲸语', accent: '#4da3ff', sun: '#ffd166', mint: '#6fe3d4', mode: 'dark' },
+  { name: '樱花粉雾', accent: '#f078a8', sun: '#ffd166', mint: '#7fd4c1', mode: 'light' },
+  { name: '森林清晨', accent: '#4a9e6f', sun: '#d9c26a', mint: '#9fd6a8', mode: 'light' },
+];
+$('presetGrid').innerHTML = PRESETS.map((p, i) =>
+  `<div class="preset" data-i="${i}"><div class="sw"><i style="background:${p.accent}"></i><i style="background:${p.sun}"></i><i style="background:${p.mint}"></i></div><div>${p.name}</div></div>`).join('');
+$('presetGrid').querySelectorAll('.preset').forEach(el => el.addEventListener('click', () => {
+  const p = PRESETS[+el.dataset.i];
+  $('cAccent').value = p.accent; $('cSun').value = p.sun; $('cMint').value = p.mint;
+  $('modeSeg').querySelectorAll('button').forEach(x => x.classList.toggle('on', x.dataset.mode === p.mode));
+  refreshPreview();
+}));
+
+function setStatus(msg, isErr) {
+  const s = $('status');
+  s.textContent = msg || '';
+  s.className = 'status' + (isErr ? ' err' : '');
+  if (msg && !isErr) setTimeout(() => { if (s.textContent === msg) s.textContent = ''; }, 3500);
+}
+
+async function collectPayload(applyNow) {
+  const name = $('name').value.trim() || '我的主题';
+  const values = deriveTokens($('cAccent').value, $('cSun').value, $('cMint').value, currentMode());
+  if (wallpaperDataURL) values.wall = `  --dsm-reference-wall: url("${wallpaperDataURL}");`;
+  if (mascotDataURL) values.mascot = `  --dsm-mascot-ui: url("${mascotDataURL}") !important;`;
+  const css = buildCSS(values);
+  return {
+    id: 'custom-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    name,
+    createdAt: Date.now(),
+    mode: currentMode(),
+    colors: { accent: $('cAccent').value, sun: $('cSun').value, mint: $('cMint').value },
+    wallpaper: wallpaperDataURL,
+    mascot: mascotDataURL,
+    welcome: $('welcome').value.trim(),
+    phrases,
+    css,
+    apply: !!applyNow
+  };
+}
+
+$('save').addEventListener('click', () => doSave(false));
+$('saveApply').addEventListener('click', () => doSave(true));
+async function doSave(applyNow) {
+  const btn = $(applyNow ? 'saveApply' : 'save');
+  btn.disabled = true;
+  try {
+    const payload = await collectPayload(applyNow);
+    const r = await bridgeCall('save', payload);
+    if (r && r.ok) {
+      setStatus(applyNow ? '已保存并应用' : '主题已保存');
+      loadSaves();
+    } else setStatus((r && r.error) || '保存失败', true);
+  } catch (e) { setStatus('保存失败：' + e.message, true); }
+  btn.disabled = false;
+}
+
+async function loadSaves() {
+  const r = await bridgeCall('list');
+  const box = $('saveList');
+  if (!r || !r.ok || !r.themes || !r.themes.length) {
+    box.innerHTML = '<div class="empty">还没有自定义主题</div>';
+    return;
+  }
+  box.innerHTML = r.themes.map(t =>
+    `<div class="save-row" data-id="${t.id}"><span class="dot" style="background:${t.colors && t.colors.accent || '#ccc'}"></span>
+     <span class="nm">${String(t.name || '').replace(/</g,'&lt;')}</span>
+     <button class="apply">使用</button><button class="del">删除</button></div>`).join('');
+  box.querySelectorAll('.save-row').forEach(row => {
+    row.querySelector('.apply').addEventListener('click', async () => {
+      const res = await bridgeCall('apply', { id: row.dataset.id });
+      setStatus(res && res.ok ? '已切换到该主题' : ((res && res.error) || '切换失败'), !res || !res.ok);
+    });
+    row.querySelector('.del').addEventListener('click', async () => {
+      const res = await bridgeCall('remove', { id: row.dataset.id });
+      setStatus(res && res.ok ? '已删除' : ((res && res.error) || '删除失败'), !res || !res.ok);
+      if (res && res.ok) loadSaves();
+    });
+  });
+}
+
+renderPhrases();
+refreshPreview();
+loadSaves().catch(() => {});
+</script>
+</body>
+</html>

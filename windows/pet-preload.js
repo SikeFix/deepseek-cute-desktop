@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('petBridge', {
   onState: (callback) => ipcRenderer.on('pet-state', (_event, state) => callback(state)),
+  onMascot: (callback) => ipcRenderer.on('pet-mascot', (_event, url) => callback(url)),
   openMain: () => ipcRenderer.send('pet-open-main'),
   retryService: () => ipcRenderer.send('pet-retry-service'),
   contextMenu: () => ipcRenderer.send('pet-context-menu'),

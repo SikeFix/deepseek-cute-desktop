@@ -62,6 +62,14 @@ final class PetView: NSView {
     private var didDrag = false
     private var currentMood: PetMood?
 
+    /// 自定义主题上传的吉祥物形象; 设置后覆盖内置情绪图
+    var customImage: NSImage? {
+        didSet {
+            guard customImage != oldValue else { return }
+            if let image = customImage { mascotView.image = image }
+        }
+    }
+
     var onActivate: (() -> Void)?
     var onInteract: (() -> Void)?
     var onRetry: (() -> Void)?
@@ -241,9 +249,12 @@ final class PetView: NSView {
     @objc private func hideFromMenu() { onHide?() }
 
     func setMood(_ mood: PetMood, text: String, color: NSColor) {
-        if currentMood != mood,
-           let imageURL = Bundle.main.url(forResource: mood.rawValue, withExtension: "png", subdirectory: "PopTheme"),
-           let image = NSImage(contentsOf: imageURL) {
+        var image: NSImage? = customImage
+        if image == nil,
+           let imageURL = Bundle.main.url(forResource: mood.rawValue, withExtension: "png", subdirectory: "PopTheme") {
+            image = NSImage(contentsOf: imageURL)
+        }
+        if currentMood != mood, let image {
             let transition = CATransition()
             transition.type = .fade
             transition.duration = 0.20
@@ -334,7 +345,42 @@ final class PetView: NSView {
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, UNUserNotificationCenterDelegate {
+/// 顶部拖拽条: 无边框样式下 WebView 会吃掉所有鼠标事件, 在窗口最上方叠一条
+/// 52px 透明区(与页面顶部悬浮栏同高), 恢复"按住顶栏拖动窗口"的能力。
+/// 单击拖动移动窗口, 双击最大化/还原; 红绿灯按钮在标题栏图层, 不受影响。
+/// 右上角状态胶囊区域放行点击, 透传给 WebView 处理(异常时可点击恢复)。
+final class TitleBarDragView: NSView {
+    static let height: CGFloat = 52
+    static let statusPassWidth: CGFloat = 170
+
+    override var isOpaque: Bool { false }
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard bounds.contains(point) else { return nil }
+        if bounds.width - point.x < Self.statusPassWidth { return nil }
+        return self
+    }
+    override func mouseDown(with event: NSEvent) {
+        guard let window else { return }
+        if event.clickCount == 2 { window.zoom(nil) }
+        else { window.performDrag(with: event) }
+    }
+}
+
+/// 主窗口容器: 必须自己实现 hitTest。WKWebView 的内部命中测试会干扰
+/// NSView 默认的子视图遍历顺序, 实测默认实现下铺满的 WebView 会抢走
+/// 顶栏 52px 拖拽条的所有点击, 导致窗口无法拖动。这里显式按"上层优先"
+/// 逐个询问子视图, 行为与纯 AppKit 视图一致且确定。
+final class ChromeContainerView: NSView {
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        for sub in subviews.reversed() {
+            let hit = sub.hitTest(convert(point, to: sub))
+            if let hit { return hit }
+        }
+        return bounds.contains(point) ? self : nil
+    }
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, UNUserNotificationCenterDelegate, NSWindowDelegate {
     var window: NSWindow!
     var webView: WKWebView!
     var backendProcess: Process?
@@ -362,12 +408,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     var lastTaskURL: String?
     var taskHistory: [TaskRecord] = []
     var interfaceTheme = UserDefaults.standard.string(forKey: "DSMInterfaceTheme") ?? "cute"
-    var themeOfficialMenuItems: [NSMenuItem] = []
-    var themeCuteMenuItems: [NSMenuItem] = []
     let providerWizardVersion = "2026-08-v4-vision-qwen-1"
-    let qwenEndpoint = "https://ai-xtu.yangrucheng.eu.org/v1"
+    let qwenEndpoint = "https://www.ssnh.top/v1"
     let qwenKeychainService = "com.sikefix.deepseek-cute.provider"
     let qwenKeychainAccount = "QWEN_API_KEY"
+
+    var studioWindow: NSWindow?
+    var studioWebView: WKWebView?
+    var statsWindow: NSWindow?
+    var statsWebView: WKWebView?
+    var themeMenuItems: [String: NSMenuItem] = [:]
+    var statusThemeMenuItem: NSMenuItem?
+    var appThemeMenuItem: NSMenuItem?
+    var backendCrashTimes: [Date] = []
+    var restartWorkItem: DispatchWorkItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
@@ -380,14 +434,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let config = WKWebViewConfiguration()
         let controller = WKUserContentController()
 
-        // 注入可切换的正太主题；官方模式保留 Harness 原生样式。
-        if let cssURL = Bundle.main.url(forResource: "theme", withExtension: "css"),
-           let css = try? String(contentsOf: cssURL, encoding: .utf8),
+        // 注入当前生效主题(官方/内置/用户自定义)。自定义主题文件保存在
+        // 用户目录, 应用更新(替换 Bundle)不会丢失; 这里只注入激活主题,
+        // 切换时由 applyInterfaceTheme 重新写入 <style>。
+        let activeID = activeThemeID()
+        let activeMascot = customTheme(activeID)?["mascot"] as? String ?? ""
+        if let script = dsmThemeScript(css: loadThemeCSS(activeID) ?? "", id: activeID, mascot: activeMascot) {
+            controller.addUserScript(WKUserScript(source: script, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        }
+
+        // 应用外观层(与主题无关): 顶部悬浮栏 + 状态胶囊 + 吉祥物头像。
+        if let chromeCSS = Bundle.main.url(forResource: "app-chrome", withExtension: "css"),
+           let css = try? String(contentsOf: chromeCSS, encoding: .utf8),
            let jsonData = try? JSONSerialization.data(withJSONObject: [css]),
            let json = String(data: jsonData, encoding: .utf8) {
-            let initialTheme = interfaceTheme == "official" ? "official" : "cute"
-            let script = "window.__dsmMac=true;window.__dsmThemeMode='" + initialTheme + "';(function(){try{var s=document.createElement('style');s.id='dsm-theme-style';s.setAttribute('data-dsm-mac','app');s.textContent=" + json + ";s.disabled=window.__dsmThemeMode==='official';document.documentElement.dataset.dsmTheme=window.__dsmThemeMode;document.documentElement.appendChild(s);window.__dsmApplyTheme=function(mode){window.__dsmThemeMode=mode;document.documentElement.dataset.dsmTheme=mode;var style=document.getElementById('dsm-theme-style');if(style)style.disabled=mode==='official';window.__dsmSetThemeMode&&window.__dsmSetThemeMode(mode);};}catch(e){console.error('DSM_CSS',e);}})();"
-            controller.addUserScript(WKUserScript(source: script, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+            controller.addUserScript(WKUserScript(source: "(function(){try{var s=document.createElement('style');s.id='dsm-chrome-style';s.textContent=" + json + ";document.documentElement.appendChild(s);}catch(e){}})();", injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        }
+        if let chromeJS = Bundle.main.url(forResource: "app-chrome", withExtension: "js"),
+           let js = try? String(contentsOf: chromeJS, encoding: .utf8) {
+            controller.addUserScript(WKUserScript(source: js, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         }
 
         // 轻量本地互动：按钮波纹、指针柔光和滚动阅读增强。
@@ -417,12 +482,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         window.backgroundColor = .clear
         window.center()
         window.minSize = NSSize(width: 1000, height: 660)
-        window.contentView = webView
+
+        // contentView 换成容器: WebView 铺满 + 顶部 52px 透明拖拽条(与页面
+        // 悬浮栏同高), 让"按住顶栏拖动窗口"恢复可用(WebView 会拦截背景拖动)。
+        let container = ChromeContainerView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        webView.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(webView)
+        NSLayoutConstraint.activate([
+            webView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            webView.topAnchor.constraint(equalTo: container.topAnchor),
+            webView.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+        ])
+        let dragBar = TitleBarDragView(frame: .zero)
+        dragBar.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(dragBar)
+        NSLayoutConstraint.activate([
+            dragBar.topAnchor.constraint(equalTo: container.topAnchor),
+            dragBar.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            dragBar.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            dragBar.heightAnchor.constraint(equalToConstant: TitleBarDragView.height)
+        ])
+        window.contentView = container
         window.isReleasedWhenClosed = false
         window.setFrameAutosaveName("DeepSeekMainWindow")
         window.makeKeyAndOrderFront(nil)
 
         buildDesktopPet()
+        syncPetMascot()
         configureNotifications()
 
         showOffline()
@@ -448,13 +536,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func applicationWillTerminate(_ notification: Notification) {
         isTerminating = true
+        restartWorkItem?.cancel()
         healthTimer?.invalidate()
         updateTimer?.invalidate()
         focusTimer?.invalidate()
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "dsmService")
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "dsmPet")
+        studioWebView?.configuration.userContentController.removeScriptMessageHandler(forName: "dsmThemeStudio")
+        statsWebView?.configuration.userContentController.removeScriptMessageHandler(forName: "dsmStats")
         if let process = backendProcess, process.isRunning {
             process.terminate()
+            let deadline = Date().addingTimeInterval(2)
+            while process.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.05) }
+            if process.isRunning { kill(process.processIdentifier, SIGKILL) }
         }
         try? backendLogHandle?.close()
     }
@@ -754,12 +848,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
         let alert = NSAlert()
         alert.messageText = "设置本地千问模型"
-        alert.informativeText = "接口预设为你提供的地址。请确认模型名称，并输入该服务的密钥。图片输入会随最新 DSH 内核启用。"
+        alert.informativeText = "接口预设为你提供的地址。请确认模型名称，并输入该服务的密钥。图片输入会随最新 DSH 内核启用。可在 ssnh.top 注册登录获取密钥。"
         alert.accessoryView = stack
         alert.addButton(withTitle: "保存并使用")
         alert.addButton(withTitle: "取消")
+        alert.addButton(withTitle: "前往 ssnh.top 获取密钥")
         NSApp.activate(ignoringOtherApps: true)
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            break
+        case .alertThirdButtonReturn:
+            if let url = URL(string: "https://www.ssnh.top") { NSWorkspace.shared.open(url) }
+            showQwenProviderForm()
+            return
+        default:
+            return
+        }
         let endpoint = endpointField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let model = modelField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         let key = keyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -775,25 +879,439 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         if applyProviderConfig(provider: "qwen", endpoint: endpoint, model: model) {
             UserDefaults.standard.set(providerWizardVersion, forKey: "DSMProviderWizardVersion")
             requestBackendRecovery()
-            showAlert(title: "已切换到本地千问", message: "模型 \(model) 已启用；密钥只保存在 macOS 钥匙串中。")
+            showAlert(title: "已切换到本地千问", message: "模型 \(model.uppercased()) 已启用；密钥只保存在 macOS 钥匙串中。")
         }
     }
 
-    func applyInterfaceTheme(_ mode: String) {
-        interfaceTheme = mode == "official" ? "official" : "cute"
-        UserDefaults.standard.set(interfaceTheme, forKey: "DSMInterfaceTheme")
-        let script = "window.__dsmApplyTheme&&window.__dsmApplyTheme('\(interfaceTheme)')"
-        webView?.evaluateJavaScript(script, completionHandler: nil)
+    // MARK: - 主题(官方 / 内置 / 用户自定义)
+
+    static let builtinThemes: [(id: String, name: String)] = [
+        ("official", "DeepSeek 官方样式"),
+        ("cute", "正太主题"),
+        ("aurora", "暗夜极光"),
+        ("paper", "奶油纸感"),
+        ("deepsea", "深海鲸语")
+    ]
+
+    func isBuiltinTheme(_ id: String) -> Bool {
+        AppDelegate.builtinThemes.contains { $0.id == id }
+    }
+
+    /// 自定义主题保存在用户目录(Application Support), 应用更新只替换
+    /// Bundle, 因此主题不会因更新而丢失; 旧版本保存的 official/cute
+    /// 键值依旧兼容。
+    func themesUserDirectory() -> URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("DeepSeek Cute/Themes", isDirectory: true)
+        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        return base
+    }
+
+    func customTheme(_ id: String) -> [String: Any]? {
+        let url = themesUserDirectory().appendingPathComponent("\(id).json")
+        guard FileManager.default.fileExists(atPath: url.path),
+              let data = try? Data(contentsOf: url),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let css = obj["css"] as? String, !css.isEmpty else { return nil }
+        return obj
+    }
+
+    func customThemes() -> [[String: Any]] {
+        let dir = themesUserDirectory()
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: dir, includingPropertiesForKeys: nil
+        ) else { return [] }
+        let themes = entries
+            .filter { $0.pathExtension == "json" }
+            .compactMap { url -> [String: Any]? in
+                guard let data = try? Data(contentsOf: url),
+                      let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let css = obj["css"] as? String, !css.isEmpty else { return nil }
+                return obj
+            }
+        return themes.sorted { (($0["createdAt"] as? Double) ?? 0) > (($1["createdAt"] as? Double) ?? 0) }
+    }
+
+    func saveCustomTheme(_ theme: [String: Any]) -> String? {
+        guard let id = theme["id"] as? String, !id.isEmpty,
+              let css = theme["css"] as? String, !css.isEmpty else { return nil }
+        let safe = id.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: "\\", with: "-")
+        var obj = theme
+        obj["id"] = safe
+        guard let data = try? JSONSerialization.data(withJSONObject: obj, options: [.withoutEscapingSlashes]) else { return nil }
+        do {
+            try data.write(to: themesUserDirectory().appendingPathComponent(safe + ".json"), options: .atomic)
+            return safe
+        } catch {
+            return nil
+        }
+    }
+
+    func removeCustomTheme(_ id: String) -> Bool {
+        let url = themesUserDirectory().appendingPathComponent("\(id).json")
+        guard FileManager.default.fileExists(atPath: url.path) else { return false }
+        do { try FileManager.default.removeItem(at: url); return true } catch { return false }
+    }
+
+    func loadThemeCSS(_ id: String) -> String? {
+        if id == "official" { return "" }
+        if let css = customTheme(id)?["css"] as? String, !css.isEmpty { return css }
+        if isBuiltinTheme(id),
+           let url = Bundle.main.url(forResource: id, withExtension: "css", subdirectory: "Themes"),
+           let css = try? String(contentsOf: url, encoding: .utf8) {
+            return css
+        }
+        return nil
+    }
+
+    func activeThemeID() -> String {
+        let id = interfaceTheme
+        if id == "official" || isBuiltinTheme(id) || customTheme(id) != nil { return id }
+        return "cute"
+    }
+
+    /// 主题桥脚本: 定义 window.__dsmApplyTheme(id, css, mascot) 并写入
+    /// <style id="dsm-theme-style">; 自定义吉祥物(cute 系主题)追加
+    /// <style id="dsm-mascot-style"> 覆盖 --dsm-mascot-ui。
+    func dsmThemeScript(css: String, id: String, mascot: String) -> String? {
+        guard let cssJ = Self.jsonString(css), let idJ = Self.jsonString(id), let masJ = Self.jsonString(mascot) else { return nil }
+        return """
+        window.__dsmMac=true;
+        (function(){
+          window.__dsmMascotURL=\(masJ);
+          function applyTheme(id, css, mas){
+            window.__dsmThemeID=id;
+            var mode=id==='official'?'official':'cute';
+            window.__dsmThemeMode=mode;
+            document.documentElement.dataset.dsmTheme=mode;
+            if(css===undefined){css='';}
+            if(mas===undefined){mas=window.__dsmMascotURL||'';}
+            window.__dsmMascotURL=mas||'';
+            var style=document.getElementById('dsm-theme-style');
+            if(!style){style=document.createElement('style');style.id='dsm-theme-style';document.documentElement.appendChild(style);}
+            style.textContent=css;
+            var mo=document.getElementById('dsm-mascot-style');
+            if(!mo){mo=document.createElement('style');mo.id='dsm-mascot-style';document.documentElement.appendChild(mo);}
+            mo.textContent=(mas&&mode!=='official')?(':root{--dsm-mascot-ui:url("'+mas+'")!important}'):'';
+            window.__dsmSetThemeMode&&window.__dsmSetThemeMode(mode);
+          }
+          window.__dsmApplyTheme=applyTheme;
+          applyTheme(\(idJ),\(cssJ),\(masJ));
+        })();
+        """
+    }
+
+    static func jsonString(_ s: String) -> String? {
+        guard let data = try? JSONSerialization.data(withJSONObject: [s]) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    func applyInterfaceTheme(_ id: String) {
+        guard id == "official" || isBuiltinTheme(id) || customTheme(id) != nil else { return }
+        interfaceTheme = id
+        UserDefaults.standard.set(id, forKey: "DSMInterfaceTheme")
+        let css = loadThemeCSS(id) ?? ""
+        let mascot = customTheme(id)?["mascot"] as? String ?? ""
+        if let cssJ = Self.jsonString(css), let idJ = Self.jsonString(id), let masJ = Self.jsonString(mascot) {
+            // 走 chrome 包装过的 __dsmApplyTheme: 更新吉祥物头像并重建官方模式装饰
+            webView?.evaluateJavaScript(
+                "window.__dsmApplyTheme&&window.__dsmApplyTheme(\(idJ),\(cssJ),\(masJ));window.__dsmChromeRefresh&&window.__dsmChromeRefresh();",
+                completionHandler: nil)
+        }
+        syncPetMascot()
+        refreshThemeMenuState()
+    }
+
+    /// 把激活主题的自定义吉祥物同步给桌面宠物与 Dock 图标
+    func syncPetMascot() {
+        let mascot = customTheme(activeThemeID())?["mascot"] as? String ?? ""
+        let img = mascot.isEmpty ? nil : Self.dsmDataURLImage(mascot)
+        petView?.customImage = img
+        if let img { NSApp.applicationIconImage = Self.appIconRounded(img) }
+        else { NSApp.applicationIconImage = NSImage(named: NSImage.applicationIconName) }
+    }
+
+    /// 把吉祥物裁成 macOS 圆角图标(Dock / 弹窗使用)
+    static func appIconRounded(_ image: NSImage) -> NSImage {
+        let size = NSSize(width: 512, height: 512)
+        let out = NSImage(size: size)
+        out.lockFocus()
+        NSGraphicsContext.current?.imageInterpolation = .high
+        let inset: CGFloat = 10
+        let rect = NSRect(x: inset, y: inset, width: size.width - inset * 2, height: size.height - inset * 2)
+        let radius = rect.width * 0.225
+        NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).addClip()
+        // 居中方形裁切绘制吉祥物
+        let s = min(rect.width, rect.height)
+        let sx = (image.size.width - image.size.height) / 2
+        let src = NSRect(x: sx, y: 0, width: image.size.height, height: image.size.height)
+        image.draw(in: NSRect(x: rect.midX - s / 2, y: rect.midY - s / 2, width: s, height: s),
+                   from: src, operation: .sourceOver, fraction: 1)
+        out.unlockFocus()
+        return out
+    }
+
+    static func dsmDataURLImage(_ s: String) -> NSImage? {
+        guard s.hasPrefix("data:"), s.contains("base64,"),
+              let comma = s.firstIndex(of: ",") else { return nil }
+        let b64 = String(s[s.index(after: comma)...])
+            .replacingOccurrences(of: "\r", with: "")
+            .replacingOccurrences(of: "\n", with: "")
+        guard let data = Data(base64Encoded: b64) else { return nil }
+        return NSImage(data: data)
+    }
+
+    @objc func selectThemeFromMenu(_ sender: NSMenuItem) {
+        if let id = sender.representedObject as? String { applyInterfaceTheme(id) }
+    }
+
+    func makeThemeMenu() -> NSMenu {
+        let themeMenu = NSMenu(title: "界面主题")
+        themeMenuItems.removeAll()
+        for entry in AppDelegate.builtinThemes {
+            let item = NSMenuItem(title: entry.name, action: #selector(selectThemeFromMenu(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = entry.id
+            themeMenuItems[entry.id] = item
+            themeMenu.addItem(item)
+        }
+        let customs = customThemes()
+        if !customs.isEmpty { themeMenu.addItem(.separator()) }
+        for theme in customs {
+            let id = (theme["id"] as? String) ?? ""
+            let name = (theme["name"] as? String) ?? id
+            let item = NSMenuItem(title: name, action: #selector(selectThemeFromMenu(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = id
+            themeMenuItems[id] = item
+            themeMenu.addItem(item)
+        }
+        themeMenu.addItem(.separator())
+        let studio = NSMenuItem(title: "主题工作室…（创建自定义主题）", action: #selector(openThemeStudio), keyEquivalent: "")
+        studio.target = self
+        themeMenu.addItem(studio)
+        return themeMenu
+    }
+
+    func rebuildThemeMenus() {
+        statusThemeMenuItem?.submenu = makeThemeMenu()
+        appThemeMenuItem?.submenu = makeThemeMenu()
         refreshThemeMenuState()
     }
 
     func refreshThemeMenuState() {
-        themeOfficialMenuItems.forEach { $0.state = interfaceTheme == "official" ? .on : .off }
-        themeCuteMenuItems.forEach { $0.state = interfaceTheme == "cute" ? .on : .off }
+        for (id, item) in themeMenuItems { item.state = id == interfaceTheme ? .on : .off }
     }
 
-    @objc func useOfficialTheme() { applyInterfaceTheme("official") }
-    @objc func useCuteTheme() { applyInterfaceTheme("cute") }
+    // MARK: - 主题工作室(用户自定义主题: 颜色/壁纸/文案)
+
+    @objc func openThemeStudio() {
+        if let win = studioWindow {
+            win.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        guard let url = Bundle.main.url(forResource: "theme-studio", withExtension: "html", subdirectory: "Themes") else {
+            showAlert(title: "主题工作室不可用", message: "应用组件不完整，请重新安装最新版。")
+            return
+        }
+        let win = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 980, height: 760),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered, defer: false
+        )
+        win.title = "主题工作室"
+        win.minSize = NSSize(width: 860, height: 620)
+        win.isReleasedWhenClosed = false
+        win.delegate = self
+        let config = WKWebViewConfiguration()
+        let controller = WKUserContentController()
+        controller.add(self, name: "dsmThemeStudio")
+        config.userContentController = controller
+        let web = WKWebView(frame: .zero, configuration: config)
+        web.navigationDelegate = self
+        win.contentView = web
+        studioWindow = win
+        studioWebView = web
+        win.center()
+        win.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        web.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+    }
+
+    func studioReply(_ id: String?, _ result: [String: Any]) {
+        guard let id, let web = studioWebView,
+              let data = try? JSONSerialization.data(withJSONObject: result),
+              let js = String(data: data, encoding: .utf8) else { return }
+        web.evaluateJavaScript(
+            "window.__dsmStudioReplies&&window.__dsmStudioReplies['\(id)']&&(window.__dsmStudioReplies['\(id)'](\(js)),delete window.__dsmStudioReplies['\(id)'])",
+            completionHandler: nil
+        )
+    }
+
+    func handleStudioMessage(_ payload: [String: Any]) {
+        guard let action = payload["action"] as? String else { return }
+        // replyId 是桥的回复通道; payload["id"] 是主题自身的 ID(save/get/apply/remove 用)
+        let replyID = payload["replyId"] as? String
+        switch action {
+        case "save":
+            var theme = payload
+            theme.removeValue(forKey: "replyId")
+            theme.removeValue(forKey: "action")
+            let applyNow = (theme.removeValue(forKey: "apply") as? Bool) ?? false
+            if let savedID = saveCustomTheme(theme) {
+                rebuildThemeMenus()
+                if applyNow { applyInterfaceTheme(savedID) }
+                studioReply(replyID, ["ok": true, "id": savedID])
+                writeAppLog("custom theme saved id=\(savedID)")
+            } else {
+                studioReply(replyID, ["ok": false, "error": "保存失败，请重试"])
+            }
+        case "list":
+            let themes = customThemes().compactMap { t -> [String: Any]? in
+                guard let tid = t["id"] as? String else { return nil }
+                return ["id": tid, "name": t["name"] as? String ?? tid, "colors": t["colors"] ?? NSNull()]
+            }
+            studioReply(replyID, ["ok": true, "themes": themes])
+        case "get":
+            if let tid = payload["id"] as? String, let t = customTheme(tid) {
+                studioReply(replyID, ["ok": true, "theme": t])
+            } else {
+                studioReply(replyID, ["ok": false])
+            }
+        case "apply":
+            if let tid = payload["id"] as? String, customTheme(tid) != nil {
+                applyInterfaceTheme(tid)
+                rebuildThemeMenus()
+                studioReply(replyID, ["ok": true])
+            } else {
+                studioReply(replyID, ["ok": false, "error": "主题不存在"])
+            }
+        case "remove":
+            if let tid = payload["id"] as? String, removeCustomTheme(tid) {
+                if interfaceTheme == tid { applyInterfaceTheme("cute") }
+                rebuildThemeMenus()
+                studioReply(replyID, ["ok": true])
+            } else {
+                studioReply(replyID, ["ok": false, "error": "删除失败"])
+            }
+        case "close":
+            studioWindow?.close()
+        default:
+            studioReply(replyID, ["ok": false, "error": "未知操作"])
+        }
+    }
+
+    // MARK: - Token 使用统计
+
+    @objc func openStatsWindow() {
+        if let win = statsWindow {
+            win.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        guard let url = Bundle.main.url(forResource: "stats", withExtension: "html", subdirectory: "Stats"),
+              var html = try? String(contentsOf: url, encoding: .utf8) else {
+            showAlert(title: "统计不可用", message: "应用组件不完整，请重新安装最新版。")
+            return
+        }
+        let win = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 880, height: 840),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered, defer: false
+        )
+        win.title = "Token 使用统计"
+        win.minSize = NSSize(width: 720, height: 600)
+        win.isReleasedWhenClosed = false
+        win.delegate = self
+        let config = WKWebViewConfiguration()
+        let controller = WKUserContentController()
+        controller.add(self, name: "dsmStats")
+        config.userContentController = controller
+        let web = WKWebView(frame: .zero, configuration: config)
+        web.navigationDelegate = self
+        win.contentView = web
+        statsWindow = win
+        statsWebView = web
+        win.center()
+        win.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        // 有缓存就立刻渲染, 随后后台增量扫描并注入最新数据
+        if let cached = readCachedStatsJSON() {
+            html = html.replacingOccurrences(of: "/*__DSM_STATS_DATA__*/null", with: "/*__DSM_STATS_DATA__*/" + cached)
+        }
+        web.loadHTMLString(html, baseURL: url.deletingLastPathComponent())
+        refreshStats(force: false)
+    }
+
+    func statsCacheURL() -> URL {
+        let url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("DeepSeek Cute/usage-stats.json")
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        return url
+    }
+
+    func readCachedStatsJSON() -> String? {
+        guard let data = try? Data(contentsOf: statsCacheURL()),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let result = obj["result"] as? [String: Any],
+              let resData = try? JSONSerialization.data(withJSONObject: result),
+              let res = String(data: resData, encoding: .utf8) else { return nil }
+        return res
+    }
+
+    /// 在后台线程运行统计脚本(短生命周期 node 进程, 限制堆内存);
+    /// 脚本按文件指纹增量扫描, 无变化时耗时毫秒级。
+    func runUsageStats(force: Bool) -> String? {
+        guard let node = Bundle.main.url(forResource: "node", withExtension: nil, subdirectory: "Runtime/bin"),
+              let script = Bundle.main.url(forResource: "usage-stats", withExtension: "mjs", subdirectory: "Stats") else {
+            return readCachedStatsJSON()
+        }
+        let process = Process()
+        process.executableURL = node
+        process.arguments = ["--max-old-space-size=1024", script.path, "--out", statsCacheURL().path]
+        if force { process.arguments = (process.arguments ?? []) + ["--refresh", "1"] }
+        var env = ProcessInfo.processInfo.environment
+        let bundledBin = Bundle.main.resourceURL?.appendingPathComponent("Runtime/bin").path ?? ""
+        env["PATH"] = bundledBin + ":/usr/bin:/bin:" + (env["PATH"] ?? "")
+        env["NO_COLOR"] = "1"
+        process.environment = env
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        do { try process.run() } catch { return readCachedStatsJSON() }
+        let watchdog = DispatchWorkItem { if process.isRunning { kill(process.processIdentifier, SIGKILL) } }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 90, execute: watchdog)
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        watchdog.cancel()
+        let stdout = (String(data: data, encoding: .utf8) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard process.terminationStatus == 0, !stdout.isEmpty else {
+            writeAppLog("usage stats run failed status=\(process.terminationStatus)")
+            return readCachedStatsJSON()
+        }
+        return stdout
+    }
+
+    func refreshStats(force: Bool) {
+        guard statsWebView != nil else { return }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let json = self.runUsageStats(force: force)
+            DispatchQueue.main.async {
+                guard let web = self.statsWebView else { return }
+                if let json {
+                    web.evaluateJavaScript("window.__dsmStatsInject&&window.__dsmStatsInject(\(json))", completionHandler: nil)
+                }
+            }
+        }
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard let win = notification.object as? NSWindow else { return }
+        if win === studioWindow { studioWindow = nil; studioWebView = nil }
+        if win === statsWindow { statsWindow = nil; statsWebView = nil }
+    }
 
     func checkBackend(shouldRecover: Bool) {
         guard let url = URL(string: APP_URL) else { return }
@@ -807,6 +1325,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 if online {
                     self.consecutiveHealthFailures = 0
                     self.publishServiceStatus("online")
+                    self.noteBackendHealthy()
                     let host = self.webView.url?.host ?? ""
                     if host != "127.0.0.1" && host != "localhost" {
                         self.loadApp()
@@ -826,11 +1345,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
                 let startupAge = Date().timeIntervalSince(self.backendStartedAt ?? Date())
                 if self.consecutiveHealthFailures >= 4, startupAge > 20 {
-                    self.backendProcess?.terminate()
-                    self.backendProcess = nil
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
-                        self?.launchBackend()
-                    }
+                    self.writeAppLog("backend unresponsive, terminating pid=\(self.backendProcess?.processIdentifier ?? -1)")
+                    self.backendProcess?.terminate() // 退出后由退避重启接管
                 }
             }
         }.resume()
@@ -868,6 +1384,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
         publishServiceStatus("starting")
 
+        // 清理占用 3080 的残留进程(上次异常退出/重复启动), 避免 EADDRINUSE
+        // 造成"崩了再拉、再崩再拉"的循环与内存翻倍。
+        killStalePortListeners()
+
         let process = Process()
         let fileManager = FileManager.default
         let bundledNode = Bundle.main.url(
@@ -881,28 +1401,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             subdirectory: "Runtime/dsh/node_modules/@deepseek-ai/dsh/lib"
         )
         var runtimeLabel = "system npx"
+        var usesBundledNode = false
 
         if let bundledNode, let bundledDSH,
            fileManager.isExecutableFile(atPath: bundledNode.path),
            fileManager.fileExists(atPath: bundledDSH.path) {
             process.executableURL = bundledNode
-            process.arguments = [bundledDSH.path, "web"]
+            // --max-old-space-size: 限制后端 V8 堆, 防止长会话内存持续膨胀;
+            // 超过上限会触发受控崩溃, 由退避重启兜底(比无上限增长到数 GB 更稳)。
+            process.arguments = ["--max-old-space-size=1024", bundledDSH.path, "web", "--no-open"]
+            usesBundledNode = true
             runtimeLabel = "bundled Node + dsh"
         } else if fileManager.isExecutableFile(atPath: "/opt/homebrew/bin/npx") {
             process.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/npx")
-            process.arguments = ["--yes", "@deepseek-ai/dsh", "web"]
+            process.arguments = ["--yes", "@deepseek-ai/dsh", "web", "--no-open"]
         } else if fileManager.isExecutableFile(atPath: "/usr/local/bin/npx") {
             process.executableURL = URL(fileURLWithPath: "/usr/local/bin/npx")
-            process.arguments = ["--yes", "@deepseek-ai/dsh", "web"]
+            process.arguments = ["--yes", "@deepseek-ai/dsh", "web", "--no-open"]
         } else {
             process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = ["npx", "--yes", "@deepseek-ai/dsh", "web"]
+            process.arguments = ["npx", "--yes", "@deepseek-ai/dsh", "web", "--no-open"]
         }
 
         var environment = ProcessInfo.processInfo.environment
         let bundledBin = Bundle.main.resourceURL?.appendingPathComponent("Runtime/bin").path ?? ""
         environment["PATH"] = bundledBin + ":/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:" + (environment["PATH"] ?? "")
         environment["NO_COLOR"] = "1"
+        if !usesBundledNode {
+            environment["NODE_OPTIONS"] = "--max-old-space-size=1024"
+        }
         if let qwenKey = keychainPassword(), !qwenKey.isEmpty {
             environment["QWEN_API_KEY"] = qwenKey
         }
@@ -917,17 +1444,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         }
         process.terminationHandler = { [weak self] finished in
             DispatchQueue.main.async {
-                if self?.backendProcess?.processIdentifier == finished.processIdentifier {
-                    self?.backendProcess = nil
+                guard let self else { return }
+                if self.backendProcess?.processIdentifier == finished.processIdentifier {
+                    self.backendProcess = nil
                 }
-                guard let self, !self.isTerminating else { return }
-                self.writeAppLog("backend exited status=\(finished.terminationStatus)")
                 try? self.backendLogHandle?.close()
                 self.backendLogHandle = nil
-                self.publishServiceStatus("offline")
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
-                    self?.checkBackend(shouldRecover: true)
-                }
+                guard !self.isTerminating else { return }
+                self.writeAppLog("backend exited status=\(finished.terminationStatus)")
+                self.scheduleBackendRestart()
             }
         }
 
@@ -945,6 +1470,65 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             backendLogHandle = nil
             publishServiceStatus("offline")
         }
+    }
+
+    /// 启动服务前清理占用 3080 端口的残留进程。
+    func killStalePortListeners() {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
+        process.arguments = ["-ti", "tcp:3080", "-sTCP:LISTEN"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            process.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let pids = (String(data: data, encoding: .utf8)?
+                .split(separator: "\n").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }) ?? []
+            let own = ProcessInfo.processInfo.processIdentifier
+            let stale = pids.filter { $0 != own }
+            guard !stale.isEmpty else { return }
+            stale.forEach { kill(Int32($0), SIGTERM) }
+            Thread.sleep(forTimeInterval: 0.6)
+            stale.forEach { kill(Int32($0), SIGKILL) }
+            writeAppLog("killed stale port 3080 listeners: \(stale)")
+        } catch {
+            writeAppLog("port listener check failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// 崩溃退避重启: 1.2s → 4s → 12s → 36s → 60s; 5 分钟内崩 5 次以上
+    /// 停止自动重启, 避免空转烧 CPU/内存, 等用户手动重试。
+    func scheduleBackendRestart() {
+        let now = Date()
+        backendCrashTimes.append(now)
+        backendCrashTimes = backendCrashTimes.filter { now.timeIntervalSince($0) < 300 }
+        publishServiceStatus("offline")
+        let count = backendCrashTimes.count
+        guard count <= 5 else {
+            writeAppLog("backend restart suppressed: \(count) crashes within 5 minutes")
+            if !taskBusy {
+                petView?.setMood(.error, text: "服务反复崩溃 · 点我重试", color: .systemRed)
+            }
+            return
+        }
+        let delay: TimeInterval = [1.2, 4, 12, 36, 60][min(count - 1, 4)]
+        restartWorkItem?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            guard let self, !self.isTerminating else { return }
+            self.launchBackend()
+        }
+        restartWorkItem = item
+        writeAppLog("backend restart scheduled in \(delay)s (crash #\(count))")
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
+    }
+
+    func noteBackendHealthy() {
+        guard !backendCrashTimes.isEmpty,
+              let last = backendCrashTimes.last,
+              Date().timeIntervalSince(last) > 90 else { return }
+        backendCrashTimes.removeAll()
     }
 
     func publishServiceStatus(_ status: String) {
@@ -973,13 +1557,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     func requestBackendRecovery() {
         if let process = backendProcess, process.isRunning {
             showOffline()
-            process.terminate()
-            backendProcess = nil
+            backendCrashTimes.removeAll() // 手动重试不计入崩溃退避
             publishServiceStatus("starting")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
-                self?.launchBackend()
-            }
+            process.terminate() // 退出后由退避重启立即拉起
         } else {
+            backendCrashTimes.removeAll()
             checkBackend(shouldRecover: true)
             loadApp()
         }
@@ -992,6 +1574,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             } else if command == "check" {
                 checkBackend(shouldRecover: true)
             }
+            return
+        }
+
+        if message.name == "dsmThemeStudio", let payload = message.body as? [String: Any] {
+            handleStudioMessage(payload)
+            return
+        }
+
+        if message.name == "dsmStats" {
+            refreshStats(force: true)
             return
         }
 
@@ -1275,6 +1867,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     // MARK: - WKNavigationDelegate
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        if webView === studioWebView || webView === statsWebView { return }
         webView.evaluateJavaScript("Boolean(window.__dsmMac)") { result, _ in
             let ok = (result as? NSNumber)?.boolValue ?? false
             NSLog("DSM_THEME_CHECK: %@", ok ? "true" : "false")
@@ -1320,8 +1913,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
                  for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        if navigationAction.targetFrame == nil, let request = navigationAction.request.url {
-            webView.load(URLRequest(url: request))
+        // 页面请求开新窗口(target=_blank / window.open):
+        // 本地地址留在应用内, 外部链接交给系统浏览器。
+        // 旧实现会把外部页面加载进主 WebView 再被健康检查拽回,
+        // 表现为"点了没反应/网页打不开"。
+        if let request = navigationAction.request.url {
+            let host = request.host ?? ""
+            if host == "127.0.0.1" || host == "localhost" {
+                webView.load(URLRequest(url: request))
+            } else if request.scheme == "http" || request.scheme == "https" {
+                NSWorkspace.shared.open(request)
+            }
         }
         return nil
     }
@@ -1351,16 +1953,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         menu.addItem(restart)
 
         let theme = NSMenuItem(title: "界面主题", action: nil, keyEquivalent: "")
-        let themeMenu = NSMenu(title: "界面主题")
-        let officialTheme = NSMenuItem(title: "DeepSeek 官方样式", action: #selector(useOfficialTheme), keyEquivalent: "")
-        let cuteTheme = NSMenuItem(title: "正太主题", action: #selector(useCuteTheme), keyEquivalent: "")
-        for entry in [officialTheme, cuteTheme] { entry.target = self }
-        themeOfficialMenuItems.append(officialTheme)
-        themeCuteMenuItems.append(cuteTheme)
-        themeMenu.addItem(officialTheme)
-        themeMenu.addItem(cuteTheme)
-        theme.submenu = themeMenu
+        theme.submenu = makeThemeMenu()
         menu.addItem(theme)
+        statusThemeMenuItem = theme
+
+        let stats = NSMenuItem(title: "Token 使用统计…", action: #selector(openStatsWindow), keyEquivalent: "")
+        stats.target = self
+        menu.addItem(stats)
 
         let provider = NSMenuItem(title: "模型服务设置…", action: #selector(showModelProviderWizard), keyEquivalent: "")
         provider.target = self
@@ -1486,16 +2085,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         appMenu.addItem(withTitle: "显示/隐藏桌面宠物", action: #selector(AppDelegate.toggleDesktopPet), keyEquivalent: "p")
         appMenu.addItem(withTitle: "测试任务完成提醒", action: #selector(AppDelegate.testPetCompletion), keyEquivalent: "")
         let themeItem = NSMenuItem(title: "界面主题", action: nil, keyEquivalent: "")
-        let themeMenu = NSMenu(title: "界面主题")
-        let officialTheme = NSMenuItem(title: "DeepSeek 官方样式", action: #selector(AppDelegate.useOfficialTheme), keyEquivalent: "")
-        let cuteTheme = NSMenuItem(title: "正太主题", action: #selector(AppDelegate.useCuteTheme), keyEquivalent: "")
-        for entry in [officialTheme, cuteTheme] { entry.target = self }
-        themeOfficialMenuItems.append(officialTheme)
-        themeCuteMenuItems.append(cuteTheme)
-        themeMenu.addItem(officialTheme)
-        themeMenu.addItem(cuteTheme)
-        themeItem.submenu = themeMenu
+        themeItem.submenu = makeThemeMenu()
         appMenu.addItem(themeItem)
+        appThemeMenuItem = themeItem
+        let statsItem = appMenu.addItem(withTitle: "Token 使用统计…", action: #selector(AppDelegate.openStatsWindow), keyEquivalent: "t")
+        statsItem.keyEquivalentModifierMask = [.command, .shift]
+        statsItem.target = self
         let providerItem = appMenu.addItem(withTitle: "模型服务设置…", action: #selector(AppDelegate.showModelProviderWizard), keyEquivalent: "")
         providerItem.target = self
         appMenu.addItem(.separator())

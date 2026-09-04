@@ -1,0 +1,1182 @@
+/* ============================================================
+   DeepSeek · macOS 风格主题 (DSM)
+   单一来源: 客户端插件 styles.insert / Mac App WKUserScript 共用
+   壁纸占位符: __WALL_DARK__ / __WALL_LIGHT__
+   ============================================================ */
+
+/* ---------- 壁纸回退(未加载到图片时是纯渐变) ---------- */
+:root {
+  --dsm-wall-dark: linear-gradient(160deg, #101e20 0%, #16302e 45%, #1d3a34 100%);
+  --dsm-wall-light: linear-gradient(160deg, #fdf8ec 0%, #f6eeda 45%, #eef0dd 100%);
+}
+
+/* ---------- 基础排版质感 ---------- */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 30%, transparent);
+}
+
+/* ---------- 调色板令牌(强制覆盖, 深浅两套) ---------- */
+html[style*="color-scheme: dark"] body,
+html[style*="color-scheme:dark"] body {
+  --dsw-alias-bg-base: rgba(16, 28, 30, 0.62) !important;
+  --dsw-alias-bg-layer-1: rgba(26, 40, 40, 0.60) !important;
+  --dsw-alias-bg-layer-2: rgba(38, 54, 52, 0.55) !important;
+  --dsw-alias-bg-overlay: rgba(24, 36, 36, 0.94) !important;
+  --dsw-alias-border-l1: rgba(232, 205, 148, 0.14) !important;
+  --dsw-alias-border-l2: rgba(232, 205, 148, 0.24) !important;
+  --dsw-alias-brand-primary: #d99a3d !important;
+  --dsw-alias-label-primary: #f7efdc !important;
+  --dsw-alias-label-secondary: #b8b39a !important;
+  --dsw-alias-state-error-primary: #ff8a7a !important;
+  --dsw-alias-state-success-primary: #6fd3a3 !important;
+  --dsw-alias-state-warn-primary: #ffc46b !important;
+  --dsw-specific-sidebar-fill: rgba(18, 30, 30, 0.45) !important;
+  --dsm-wall: var(--dsm-wall-dark);
+  --dsm-veil: linear-gradient(180deg, rgba(12, 22, 22, 0.30), rgba(12, 22, 22, 0.52));
+  --dsm-accent-glow: rgba(224, 169, 79, 0.30);
+}
+
+html[style*="color-scheme: light"] body,
+html[style*="color-scheme:light"] body {
+  --dsw-alias-bg-base: rgba(250, 244, 230, 0.72) !important;
+  --dsw-alias-bg-layer-1: rgba(255, 251, 241, 0.74) !important;
+  --dsw-alias-bg-layer-2: rgba(246, 238, 219, 0.76) !important;
+  --dsw-alias-bg-overlay: rgba(255, 252, 244, 0.95) !important;
+  --dsw-alias-border-l1: rgba(146, 106, 46, 0.14) !important;
+  --dsw-alias-border-l2: rgba(146, 106, 46, 0.24) !important;
+  --dsw-alias-brand-primary: #b97f26 !important;
+  --dsw-alias-label-primary: #2e2a1e !important;
+  --dsw-alias-label-secondary: #7a7257 !important;
+  --dsw-alias-state-error-primary: #d5443b !important;
+  --dsw-alias-state-success-primary: #1f9d6c !important;
+  --dsw-alias-state-warn-primary: #b06e10 !important;
+  --dsw-specific-sidebar-fill: rgba(255, 250, 238, 0.50) !important;
+  --dsm-wall: var(--dsm-wall-light);
+  --dsm-veil: linear-gradient(180deg, rgba(255, 250, 238, 0.48), rgba(248, 240, 220, 0.60));
+  --dsm-accent-glow: rgba(200, 148, 54, 0.25);
+}
+
+/* ---------- 窗口框架: 壁纸 + 呼吸极光 ----------
+   注意: 玻璃模糊一律放负 z 伪元素, 绝不能加在容器自身上 ——
+   backdrop-filter 会把 fixed 弹层(设置面板/批准框等)困在容器内。 */
+[class$="_frame"] {
+  position: relative;
+  isolation: isolate;
+  background-image: var(--dsm-veil), var(--dsm-wall);
+  background-size: cover, cover;
+  background-position: center, center;
+  background-repeat: no-repeat, no-repeat;
+}
+
+[class$="_frame"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(55% 45% at 78% 12%, rgba(224, 169, 79, 0.15), transparent 62%),
+    radial-gradient(45% 38% at 16% 92%, rgba(63, 157, 142, 0.13), transparent 60%),
+    radial-gradient(40% 40% at 92% 85%, rgba(240, 130, 90, 0.10), transparent 60%);
+  animation: dsm-aurora 24s ease-in-out infinite alternate;
+}
+
+@keyframes dsm-aurora {
+  0%   { opacity: .5; transform: translate3d(0, 0, 0) scale(1); }
+  50%  { opacity: .9; }
+  100% { opacity: .6; transform: translate3d(-1.5%, 1%, 0) scale(1.05); }
+}
+
+/* ---------- 三栏玻璃 (模糊放 ::before, 不困住 fixed 弹层) ---------- */
+[class$="_sidebarCol"] {
+  position: relative;
+  border-right: 1px solid var(--dsw-alias-border-l1);
+}
+
+[class$="_sidebarCol"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(26px) saturate(170%);
+  backdrop-filter: blur(26px) saturate(170%);
+}
+
+/* 详情面板玻璃 */
+[data-slot="details"] > [class$="_root"] {
+  position: relative;
+}
+
+[data-slot="details"] > [class$="_root"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(26px) saturate(170%);
+  backdrop-filter: blur(26px) saturate(170%);
+}
+
+/* ---------- 会话区顶栏玻璃 ---------- */
+[data-slot="conversation.session.header"] [class$="_header"] {
+  position: relative;
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 62%, transparent);
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+
+[data-slot="conversation.session.header"] [class$="_header"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  backdrop-filter: blur(22px) saturate(160%);
+}
+
+/* ---------- 输入卡片玻璃 ---------- */
+[data-slot="conversation.composer"] [class$="_card"] {
+  position: relative;
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 86%, transparent);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 22px;
+  box-shadow: 0 14px 44px rgba(3, 8, 24, 0.28), 0 2px 8px rgba(3, 8, 24, 0.12);
+  transition: box-shadow .3s var(--ds-ease-in-out), border-color .3s var(--ds-ease-in-out);
+}
+
+[data-slot="conversation.composer"] [class$="_card"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  backdrop-filter: blur(28px) saturate(180%);
+}
+
+/* ---------- 设置等对话框玻璃 ---------- */
+[role="dialog"][class$="_panel"] {
+  background: color-mix(in srgb, var(--dsw-alias-bg-overlay) 90%, transparent);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 18px;
+  box-shadow: 0 24px 80px rgba(2, 8, 23, 0.5);
+  -webkit-backdrop-filter: blur(30px) saturate(170%);
+  backdrop-filter: blur(30px) saturate(170%);
+}
+
+[data-slot="conversation.composer"] [class$="_card"]:focus-within {
+  border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 55%, transparent);
+  box-shadow: 0 18px 54px rgba(3, 8, 24, 0.32),
+              0 0 0 4px color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent);
+}
+
+html[style*="color-scheme: light"] [data-slot="conversation.composer"] [class$="_card"] {
+  box-shadow: 0 14px 40px rgba(146, 106, 46, 0.16), 0 2px 8px rgba(146, 106, 46, 0.10);
+}
+
+/* ---------- 发送按钮光晕 ---------- */
+button[aria-label="发送消息"] {
+  box-shadow: 0 10px 24px rgba(217, 154, 61, 0.35);
+  transition: box-shadow .25s var(--ds-ease-in-out), transform .15s var(--ds-ease-in-out);
+}
+
+button[aria-label="发送消息"]:hover {
+  box-shadow: 0 12px 30px rgba(217, 154, 61, 0.48);
+}
+
+/* ---------- 侧栏选中项品牌高亮 ---------- */
+[data-slot="sidebar"] [class$="_selected"] {
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 10%, transparent) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-brand-primary) 36%, transparent);
+}
+
+/* ---------- 鲸鱼 LOGO 光晕 ---------- */
+[class$="_headline"] svg {
+  filter: drop-shadow(0 10px 28px var(--dsm-accent-glow));
+}
+
+/* ---------- 滚动条 ---------- */
+*::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--dsw-alias-label-secondary) 32%, transparent);
+  border-radius: 8px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--dsw-alias-label-secondary) 52%, transparent);
+  background-clip: padding-box;
+}
+
+/* ---------- 键盘焦点 ---------- */
+button:focus-visible,
+[role="button"]:focus-visible,
+a:focus-visible,
+textarea:focus-visible,
+input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--dsw-alias-brand-primary) 65%, transparent);
+  outline-offset: 2px;
+}
+
+/* ---------- 悬浮层玻璃 ---------- */
+[data-slot="shell.overlay"] > * {
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(20px) saturate(160%);
+}
+
+/* ---------- 主题切换过渡 ---------- */
+[class$="_frame"],
+[class$="_sidebarCol"],
+[class$="_centerCol"],
+[class$="_detailsCol"],
+[data-slot="conversation"] > div {
+  transition: background-color .4s var(--ds-ease-in-out), border-color .4s var(--ds-ease-in-out);
+}
+
+/* ---------- 减少动态效果 ---------- */
+@media (prefers-reduced-motion: reduce) {
+  [class$="_frame"]::after {
+    animation: none;
+  }
+}
+
+/* ============================================================
+   2026 refinement pass: depth zones, dark mode, service HUD,
+   unified overlays and restrained completion interactions
+   ============================================================ */
+
+/* 三个功能区使用不同透明度，阅读区优先、背景仍可感知 */
+html[style*="color-scheme: light"] [class$="_sidebarCol"],
+html[style*="color-scheme:light"] [class$="_sidebarCol"] {
+  background: rgba(244, 250, 255, .94) !important;
+}
+
+html[style*="color-scheme: light"] [class$="_centerCol"],
+html[style*="color-scheme:light"] [class$="_centerCol"] {
+  background: rgba(244, 250, 255, .78) !important;
+}
+
+html[style*="color-scheme: light"] [class$="_detailsCol"],
+html[style*="color-scheme:light"] [class$="_detailsCol"],
+html[style*="color-scheme: light"] [data-slot="details"] > [class$="_root"],
+html[style*="color-scheme:light"] [data-slot="details"] > [class$="_root"] {
+  background: rgba(242, 249, 255, .86) !important;
+}
+
+html[style*="color-scheme: dark"] [class$="_sidebarCol"],
+html[style*="color-scheme:dark"] [class$="_sidebarCol"] {
+  background: rgba(8, 21, 38, .94) !important;
+}
+
+html[style*="color-scheme: dark"] [class$="_centerCol"],
+html[style*="color-scheme:dark"] [class$="_centerCol"] {
+  background: rgba(6, 15, 29, .82) !important;
+}
+
+html[style*="color-scheme: dark"] [class$="_detailsCol"],
+html[style*="color-scheme:dark"] [class$="_detailsCol"],
+html[style*="color-scheme: dark"] [data-slot="details"] > [class$="_root"],
+html[style*="color-scheme:dark"] [data-slot="details"] > [class$="_root"] {
+  background: rgba(11, 27, 48, .86) !important;
+}
+
+/* 深色模式独立调色与壁纸处理，不再只是浅色模式反相 */
+html[style*="color-scheme: dark"] body,
+html[style*="color-scheme:dark"] body {
+  --dsw-alias-bg-base: rgba(6, 17, 32, .88) !important;
+  --dsw-alias-bg-layer-1: rgba(13, 32, 54, .93) !important;
+  --dsw-alias-bg-layer-2: rgba(22, 48, 76, .90) !important;
+  --dsw-alias-bg-overlay: rgba(9, 23, 40, .97) !important;
+  --dsw-alias-label-primary: #eaf6ff !important;
+  --dsw-alias-label-primary-bluish: #d2f1ff !important;
+  --dsw-alias-label-primary-dimmed: #c3dcee !important;
+  --dsw-alias-label-secondary: #9fc3dd !important;
+  --dsw-alias-label-tertiary: #86acc8 !important;
+  --dsw-alias-label-caption: #7ba2bd !important;
+  --dsw-alias-label-dimmed: #6d95af !important;
+  --dsw-alias-border-l1: rgba(111, 227, 212, .22) !important;
+  --dsw-alias-border-l2: rgba(255, 209, 102, .30) !important;
+  --dsw-specific-sidebar-fill: rgba(8, 21, 38, .93) !important;
+}
+
+html[style*="color-scheme: dark"] [class$="_frame"]::before,
+html[style*="color-scheme:dark"] [class$="_frame"]::before {
+  filter: brightness(.55) saturate(.82) contrast(1.10);
+}
+
+html[style*="color-scheme: light"] [class$="_frame"]::before,
+html[style*="color-scheme:light"] [class$="_frame"]::before {
+  filter: brightness(.98) saturate(.96) contrast(1.02);
+}
+
+/* 本地服务状态灯：不占布局，位于沉浸式标题区 */
+.dsm-service-pill {
+  position: fixed !important;
+  z-index: 2147483000 !important;
+  top: 6px;
+  right: 112px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px !important;
+  color: var(--dsw-alias-label-primary) !important;
+  background: color-mix(in srgb, var(--dsw-alias-bg-overlay) 88%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--dsm-mint) 30%, transparent) !important;
+  border-radius: 999px !important;
+  box-shadow: 0 6px 20px rgba(33, 26, 25, .16) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  backdrop-filter: blur(18px) saturate(160%);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1;
+}
+
+.dsm-service-pill:hover {
+  transform: translateY(0) scale(1.03) !important;
+  border-color: var(--dsm-coral) !important;
+}
+
+.dsm-service-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dsm-sun);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--dsm-sun) 20%, transparent);
+}
+
+.dsm-service-pill[data-state="online"] .dsm-service-dot {
+  background: var(--dsm-mint);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--dsm-mint) 20%, transparent);
+}
+
+.dsm-service-pill[data-state="offline"] .dsm-service-dot {
+  background: var(--dsm-coral);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--dsm-coral) 22%, transparent);
+  animation: dsm-status-pulse 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes dsm-status-pulse {
+  from { opacity: .58; transform: scale(.86); }
+  to { opacity: 1; transform: scale(1.08); }
+}
+
+/* 发送后的小吉祥物反馈，不拦截任何点击 */
+.dsm-send-pop {
+  position: fixed;
+  z-index: 2147482999;
+  width: 38px;
+  height: 38px;
+  margin: -19px 0 0 -19px;
+  pointer-events: none;
+  border-radius: 13px;
+  background: var(--dsm-mascot-ui) center / cover no-repeat;
+  border: 2px solid rgba(255,255,255,.92);
+  box-shadow: 3px 4px 0 var(--dsm-sun), 0 10px 24px rgba(33,26,25,.22);
+  animation: dsm-send-float .9s cubic-bezier(.2,.8,.2,1) forwards;
+}
+
+@keyframes dsm-send-float {
+  0% { opacity: 0; transform: translateY(8px) scale(.72) rotate(-5deg); }
+  28% { opacity: 1; transform: translateY(-8px) scale(1.04) rotate(3deg); }
+  100% { opacity: 0; transform: translateY(-42px) scale(.88) rotate(0); }
+}
+
+/* 对话、轨迹与侧栏选中状态使用同一动效语言 */
+[role="tab"],
+[data-slot="sidebar"] [class$="_selected"] {
+  transition: color .18s ease, background-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+
+[role="tab"][aria-selected="true"] {
+  text-shadow: 0 1px 0 color-mix(in srgb, var(--dsm-sun) 48%, transparent);
+}
+
+[data-slot="sidebar"] [class$="_selected"]:hover {
+  transform: translateX(2px);
+}
+
+/* 设置、菜单、模型选择与详情面板统一为一套玻璃卡片 */
+[role="dialog"] {
+  color: var(--dsw-alias-label-primary) !important;
+}
+
+[role="dialog"][class$="_panel"],
+[role="dialog"] > [class$="_panel"],
+[data-slot="shell.overlay"] [role="dialog"] {
+  background: color-mix(in srgb, var(--dsw-alias-bg-overlay) 96%, transparent) !important;
+  border: 1.5px solid color-mix(in srgb, var(--dsm-mint) 30%, var(--dsw-alias-border-l2)) !important;
+  border-radius: 24px !important;
+  box-shadow: 0 28px 90px rgba(20, 16, 16, .42), 6px 7px 0 color-mix(in srgb, var(--dsm-sun) 30%, transparent) !important;
+}
+
+[role="menu"],
+[role="listbox"],
+[data-slot="shell.overlay"] > [class*="_menu"],
+[data-slot="shell.overlay"] > [class*="_popover"] {
+  color: var(--dsw-alias-label-primary) !important;
+  background: color-mix(in srgb, var(--dsw-alias-bg-overlay) 97%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--dsm-mint) 28%, var(--dsw-alias-border-l2)) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 18px 54px rgba(20,16,16,.34), 3px 4px 0 color-mix(in srgb, var(--dsm-sun) 26%, transparent) !important;
+}
+
+[role="dialog"] button,
+[role="menu"] button,
+[role="listbox"] button,
+[role="option"] {
+  min-height: 32px;
+  border-radius: 10px !important;
+}
+
+[role="menuitem"]:hover,
+[role="option"]:hover,
+[role="option"][aria-selected="true"] {
+  color: var(--dsw-alias-label-primary) !important;
+  background: color-mix(in srgb, var(--dsm-mint) 22%, var(--dsw-alias-bg-layer-1)) !important;
+}
+
+[data-slot="details"] > [class$="_root"] {
+  border-left: 1px solid color-mix(in srgb, var(--dsm-mint) 28%, var(--dsw-alias-border-l2)) !important;
+}
+
+[data-slot="details"] [class$="_header"] {
+  min-height: 48px;
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 76%, transparent) !important;
+}
+
+[data-slot="details"] [class$="_body"] {
+  color: var(--dsw-alias-label-primary) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dsm-service-pill[data-state="offline"] .dsm-service-dot,
+  .dsm-send-pop { animation: none; }
+  [data-slot="sidebar"] [class$="_selected"]:hover { transform: none; }
+}
+
+/* ============================================================
+   DeepSeek App 专用: 原生窗口半透明 (WKWebView 透明底)
+   ============================================================ */
+
+html,
+body {
+  background: transparent !important;
+}
+
+/* 网页自身的壁纸层改走 ::before, 半透明让桌面毛玻璃透出 */
+[class$="_frame"] {
+  background-image: none !important;
+  background-color: transparent !important;
+}
+
+[class$="_frame"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: var(--dsm-veil), var(--dsm-wall);
+  background-size: cover, cover;
+  background-position: center, center;
+  background-repeat: no-repeat, no-repeat;
+  opacity: 0.45;
+}
+
+/* 透明窗口上减弱侧栏底色, 突出穿透感 */
+html[style*="color-scheme: dark"] body,
+html[style*="color-scheme:dark"] body {
+  --dsw-specific-sidebar-fill: rgba(18, 30, 30, 0.36) !important;
+}
+
+html[style*="color-scheme: light"] body,
+html[style*="color-scheme:light"] body {
+  --dsw-specific-sidebar-fill: rgba(255, 250, 238, 0.42) !important;
+}
+
+/* ============================================================
+   Retro manga pop theme — derived from the user's reference art
+   ============================================================ */
+
+:root {
+  --dsm-reference-wall: linear-gradient(165deg, #061224 0%, #0b2545 40%, #13406b 75%, #1b5e83 100%);
+  --dsm-wall-dark: var(--dsm-reference-wall);
+  --dsm-wall-light: var(--dsm-reference-wall);
+#4da3ff
+#ffd166
+#6fe3d4
+#2c4a63
+#0d1b2a
+#e8f4ff
+}
+
+html[style*="color-scheme: dark"] body,
+html[style*="color-scheme:dark"] body {
+  --dsw-alias-bg-base: rgba(6, 17, 32, .88) !important;
+  --dsw-alias-bg-layer-1: rgba(13, 32, 54, .93) !important;
+  --dsw-alias-bg-layer-2: rgba(22, 48, 76, .90) !important;
+  --dsw-alias-bg-overlay: rgba(9, 23, 40, .97) !important;
+  --dsw-alias-border-l1: rgba(111, 227, 212, .22) !important;
+  --dsw-alias-border-l2: rgba(255, 209, 102, .30) !important;
+  --dsw-alias-brand-primary: var(--dsm-coral) !important;
+  --dsw-alias-label-primary: #eaf6ff !important;
+  --dsw-alias-label-primary-bluish: #d2f1ff !important;
+  --dsw-alias-label-primary-dimmed: #c3dcee !important;
+  --dsw-alias-label-secondary: #9fc3dd !important;
+  --dsw-alias-label-tertiary: #86acc8 !important;
+  --dsw-alias-label-caption: #7ba2bd !important;
+  --dsw-alias-label-dimmed: #6d95af !important;
+  --dsw-alias-state-error-primary: #ff8a9a !important;
+  --dsw-alias-state-success-primary: var(--dsm-mint) !important;
+  --dsw-alias-state-warn-primary: var(--dsm-sun) !important;
+  --dsw-specific-sidebar-fill: rgba(8, 21, 38, .93) !important;
+  --dsm-veil:
+    linear-gradient(90deg, rgba(6, 16, 30, 0.58), rgba(6, 16, 30, 0.42) 52%, rgba(19, 64, 107, 0.30));
+  --dsm-accent-glow: rgba(77, 163, 255, 0.38);
+}
+
+html[style*="color-scheme: light"] body,
+html[style*="color-scheme:light"] body {
+  --dsw-alias-bg-base: rgba(232, 244, 255, .88) !important;
+  --dsw-alias-bg-layer-1: rgba(244, 250, 255, .92) !important;
+  --dsw-alias-bg-layer-2: rgba(219, 236, 250, .86) !important;
+  --dsw-alias-bg-overlay: rgba(242, 249, 255, .97) !important;
+  --dsw-alias-border-l1: rgba(44, 74, 99, .20) !important;
+  --dsw-alias-border-l2: rgba(77, 163, 255, .32) !important;
+  --dsw-alias-brand-primary: #2f8ae0 !important;
+  --dsw-alias-label-primary: #122a42 !important;
+  --dsw-alias-label-primary-bluish: #0f4c66 !important;
+  --dsw-alias-label-primary-dimmed: #2f4a66 !important;
+  --dsw-alias-label-secondary: #3c5570 !important;
+  --dsw-alias-label-tertiary: #4a617a !important;
+  --dsw-alias-label-caption: #425a72 !important;
+  --dsw-alias-label-dimmed: #4e6580 !important;
+  --dsw-alias-state-error-primary: #cf4a3d !important;
+  --dsw-alias-state-success-primary: #177e6e !important;
+  --dsw-alias-state-warn-primary: #96700a !important;
+  --dsw-specific-sidebar-fill: rgba(242, 249, 255, .88) !important;
+  --dsm-veil:
+    linear-gradient(90deg, rgba(232, 244, 255, 0.32), rgba(232, 244, 255, 0.20) 54%, rgba(216, 233, 250, 0.16));
+  --dsm-accent-glow: rgba(77, 163, 255, 0.28);
+}
+
+[class$="_frame"]::before {
+  background-position: center;
+  opacity: 1;
+  filter: saturate(1.12) contrast(1.05);
+}
+
+/* macOS 全尺寸内容窗口：给红黄绿按钮留出可点击区域，背景继续铺到最顶端 */
+[class$="_frame"] {
+  box-sizing: border-box;
+  padding-top: 30px !important;
+}
+
+[class$="_frame"]::after {
+  background:
+    radial-gradient(42% 36% at 86% 14%, rgba(245, 220, 38, 0.18), transparent 64%),
+    radial-gradient(36% 34% at 10% 90%, rgba(243, 107, 80, 0.18), transparent 64%),
+    radial-gradient(30% 30% at 92% 86%, rgba(98, 232, 211, 0.13), transparent 64%);
+}
+
+[data-slot="conversation.composer"] [class$="_card"] {
+  border: 2px solid color-mix(in srgb, var(--dsw-alias-brand-primary) 34%, transparent);
+  border-radius: 18px;
+  box-shadow:
+    5px 6px 0 color-mix(in srgb, var(--dsm-ink) 36%, transparent),
+    0 18px 44px rgba(33, 26, 25, 0.22);
+}
+
+[data-slot="conversation.composer"] [class$="_card"]:focus-within {
+  border-color: var(--dsw-alias-brand-primary);
+  box-shadow:
+    4px 5px 0 color-mix(in srgb, var(--dsm-sun) 65%, transparent),
+    0 18px 48px rgba(33, 26, 25, 0.28);
+}
+
+button[aria-label="发送消息"] {
+  background: var(--dsm-coral) !important;
+  border: 2px solid color-mix(in srgb, var(--dsm-ink) 74%, transparent);
+  box-shadow: 3px 4px 0 var(--dsm-sun);
+}
+
+[data-slot="sidebar"] [class$="_selected"] {
+  background: color-mix(in srgb, var(--dsm-mint) 18%, transparent) !important;
+  box-shadow:
+    inset 4px 0 0 var(--dsm-coral),
+    inset 0 0 0 1px color-mix(in srgb, var(--dsm-ink) 28%, transparent);
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--dsm-coral) 58%, transparent);
+}
+
+::selection {
+  color: var(--dsm-ink);
+  background: color-mix(in srgb, var(--dsm-sun) 72%, transparent);
+}
+
+/* ============================================================
+   Cute mascot icon system + pop-art button language
+   ============================================================ */
+
+:root {
+  --dsm-mascot-ui: radial-gradient(circle at 35% 30%, #d2f1ff, #4da3ff 55%, #13406b 100%);
+  --dsm-candy-cream: rgba(255, 244, 219, 0.88);
+  --dsm-candy-dark: rgba(42, 37, 35, 0.86);
+  --dsm-button-outline: color-mix(in srgb, var(--dsm-ink) 58%, transparent);
+}
+
+/* 全局交互手感 */
+button {
+  font-weight: 700;
+  transition:
+    transform .16s ease,
+    background-color .18s ease,
+    border-color .18s ease,
+    box-shadow .18s ease,
+    color .18s ease,
+    filter .18s ease;
+}
+
+button:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+button:not(:disabled):active {
+  transform: translateY(1px) scale(.98);
+}
+
+button svg:not([viewBox="0 0 182 24"]) {
+  color: var(--dsm-coral);
+  filter: drop-shadow(0 1px 0 color-mix(in srgb, var(--dsm-sun) 46%, transparent));
+}
+
+button svg [stroke]:not([stroke="none"]) {
+  stroke-width: 2.15;
+}
+
+button:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--dsm-mint) 72%, transparent);
+  outline-offset: 3px;
+}
+
+/* 顶部品牌：用少年头像替换原 DeepSeek 横向 SVG */
+[data-slot="sidebar"] button[class*="_brand"] {
+  min-height: 58px;
+  padding: 7px 10px !important;
+  justify-content: flex-start;
+  gap: 10px;
+  overflow: visible;
+  color: var(--dsw-alias-label-primary);
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 76%, transparent) !important;
+  border: 2px solid color-mix(in srgb, var(--dsm-mint) 42%, transparent) !important;
+  border-radius: 17px !important;
+  box-shadow: 4px 5px 0 color-mix(in srgb, var(--dsm-sun) 74%, transparent);
+}
+
+[data-slot="sidebar"] button[class*="_brand"] [class*="_brandMark"],
+[data-slot="sidebar"] button[class*="_brand"] [class*="_brandName"],
+[data-slot="sidebar"] button[class*="_brand"] > svg {
+  display: none !important;
+}
+
+[data-slot="sidebar"] button[class*="_brand"]::before {
+  content: "";
+  flex: 0 0 43px;
+  width: 43px;
+  height: 43px;
+  border-radius: 14px;
+  background: var(--dsm-mascot-ui) center / cover no-repeat;
+  border: 2px solid color-mix(in srgb, var(--dsm-ink) 65%, transparent);
+  box-shadow: 2px 3px 0 var(--dsm-coral);
+}
+
+/* 品牌行只保留吉祥物头像, 移除 "DeepSeek" 字样 */
+[data-slot="sidebar"] button[class*="_brand"]::after {
+  content: none;
+}
+
+[data-slot="sidebar"] button[class*="_brand"]:hover {
+  border-color: var(--dsm-mint) !important;
+  box-shadow: 5px 6px 0 color-mix(in srgb, var(--dsm-coral) 82%, transparent);
+}
+
+/* 新会话欢迎区的鲸鱼替换成同一少年吉祥物 */
+[class$="_fishHitbox"] {
+  width: 66px !important;
+  height: 66px !important;
+  border-radius: 21px;
+  background: var(--dsm-mascot-ui) center / cover no-repeat;
+  border: 2px solid var(--dsm-button-outline);
+  box-shadow: 4px 5px 0 var(--dsm-sun), 0 10px 28px rgba(33, 26, 25, .22);
+}
+
+[class$="_fishHitbox"] svg {
+  display: none !important;
+}
+
+[class$="_heroGlow"] {
+  color: var(--dsm-sun) !important;
+  opacity: .24 !important;
+  filter: hue-rotate(128deg) saturate(1.5);
+}
+
+/* 通用图标按钮底板 */
+button[class*="_iconButton"],
+button[class*="_searchButton"],
+button[class$="_action"],
+button[class$="_close"],
+button[aria-label="命令"] {
+  border: 1.5px solid var(--dsm-button-outline) !important;
+  border-radius: 10px !important;
+  background: color-mix(in srgb, var(--dsm-mint) 24%, var(--dsw-alias-bg-layer-1)) !important;
+  box-shadow: 2px 3px 0 color-mix(in srgb, var(--dsm-sun) 68%, transparent);
+}
+
+button[class*="_iconButton"]:hover,
+button[class*="_searchButton"]:hover,
+button[class$="_action"]:hover,
+button[class$="_close"]:hover,
+button[aria-label="命令"]:hover {
+  background: color-mix(in srgb, var(--dsm-mint) 42%, var(--dsw-alias-bg-layer-1)) !important;
+  border-color: var(--dsm-coral) !important;
+  box-shadow: 3px 4px 0 var(--dsm-sun);
+}
+
+/* 主要动作按钮 */
+button[aria-label="新建会话"],
+button[aria-label="添加工作区"],
+button[aria-label="发送消息"] {
+  color: var(--dsm-ink) !important;
+  background: var(--dsm-coral) !important;
+  border: 2px solid var(--dsm-button-outline) !important;
+  border-radius: 13px !important;
+  box-shadow: 3px 4px 0 var(--dsm-sun) !important;
+}
+
+button[aria-label="新建会话"] svg,
+button[aria-label="添加工作区"] svg,
+button[aria-label="发送消息"] svg {
+  color: var(--dsm-ink) !important;
+  filter: none;
+}
+
+button[aria-label="新建会话"]:hover,
+button[aria-label="添加工作区"]:hover,
+button[aria-label="发送消息"]:hover {
+  background: color-mix(in srgb, var(--dsm-coral) 80%, var(--dsm-sun)) !important;
+  box-shadow: 4px 5px 0 var(--dsm-mint) !important;
+}
+
+button[aria-label="发送消息"] {
+  border-radius: 50% !important;
+}
+
+/* 顶栏、模型和权限选择器 */
+[data-slot="conversation.session.header"] button,
+[data-slot="conversation.input.dock"] button:not([aria-label="发送消息"]),
+[data-slot="conversation.composer.bar"] button:not([aria-label="发送消息"]) {
+  border-radius: 11px;
+}
+
+[data-slot="conversation.input.dock"] button:not([aria-label="发送消息"]),
+[data-slot="conversation.composer.bar"] button:not([aria-label="发送消息"]) {
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 78%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dsm-mint) 34%, transparent);
+}
+
+[data-slot="conversation.input.dock"] button:not([aria-label="发送消息"]):hover,
+[data-slot="conversation.composer.bar"] button:not([aria-label="发送消息"]):hover {
+  background: color-mix(in srgb, var(--dsm-sun) 20%, var(--dsw-alias-bg-layer-1));
+  border-color: var(--dsm-coral);
+  box-shadow: 0 3px 0 color-mix(in srgb, var(--dsm-mint) 64%, transparent);
+}
+
+button[aria-label^="访问模式"] svg,
+button[aria-label^="选择模型"] svg,
+button[aria-label^="上下文已用"] svg {
+  color: var(--dsm-mint) !important;
+}
+
+/* 侧栏文件夹、箭头和会话操作 */
+[data-slot="sidebar"] svg:not([viewBox="0 0 182 24"]) {
+  color: var(--dsm-coral);
+}
+
+[data-slot="sidebar"] [class$="_folder"],
+[data-slot="sidebar"] [class*="_folderActive"] {
+  color: var(--dsm-coral) !important;
+  filter: drop-shadow(1px 2px 0 color-mix(in srgb, var(--dsm-sun) 68%, transparent));
+}
+
+[data-slot="sidebar"] [class*="_chevron"],
+[data-slot="sidebar"] [class*="_arrow"] {
+  color: var(--dsm-mint) !important;
+  filter: none;
+}
+
+[data-slot="sidebar"] button[aria-label$="的操作"] {
+  background: color-mix(in srgb, var(--dsm-sun) 28%, var(--dsw-alias-bg-layer-1)) !important;
+}
+
+[data-slot="sidebar"] button[aria-label^="在"] {
+  background: color-mix(in srgb, var(--dsm-mint) 28%, var(--dsw-alias-bg-layer-1)) !important;
+}
+
+[data-slot="sidebar"] button[aria-label="设置"] {
+  margin: 5px 7px 8px;
+  padding: 9px 12px;
+  border: 1.5px solid color-mix(in srgb, var(--dsm-coral) 52%, transparent);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--dsm-sun) 16%, var(--dsw-alias-bg-layer-1));
+  box-shadow: 2px 3px 0 color-mix(in srgb, var(--dsm-mint) 54%, transparent);
+}
+
+/* 消息底部复制、赞踩、分支按钮 */
+button[aria-label="复制"] {
+  background: color-mix(in srgb, var(--dsm-mint) 34%, var(--dsw-alias-bg-layer-1)) !important;
+}
+
+button[aria-label="好的回答"] {
+  background: color-mix(in srgb, var(--dsm-sun) 40%, var(--dsw-alias-bg-layer-1)) !important;
+}
+
+button[aria-label="有问题的回答"] {
+  background: color-mix(in srgb, var(--dsm-coral) 28%, var(--dsw-alias-bg-layer-1)) !important;
+}
+
+button[aria-label="在新对话中分支"] {
+  background: color-mix(in srgb, var(--dsm-coral) 20%, var(--dsw-alias-bg-layer-1)) !important;
+}
+
+/* 工具调用、文件按钮和普通文本按钮 */
+[data-slot="conversation.session"] button:not(:has(svg)) {
+  border-radius: 10px;
+}
+
+[data-slot="conversation.session"] button:not(:has(svg)):hover {
+  background: color-mix(in srgb, var(--dsm-mint) 12%, transparent);
+  box-shadow: inset 3px 0 0 var(--dsm-coral);
+}
+
+[data-slot="conversation.session"] button[class*="_file"],
+[data-slot="conversation.session"] button[class*="_fileLink"] {
+  color: color-mix(in srgb, var(--dsw-alias-label-primary) 82%, var(--dsm-coral));
+  background: color-mix(in srgb, var(--dsm-sun) 16%, var(--dsw-alias-bg-layer-1));
+  border: 1px solid color-mix(in srgb, var(--dsm-coral) 36%, transparent);
+  border-radius: 9px;
+  padding-inline: 7px;
+}
+
+/* 设置弹窗：图标导航、选择器、主题按钮 */
+[role="dialog"] button,
+[data-slot="shell.overlay"] button {
+  border-radius: 11px;
+}
+
+[role="dialog"] button svg,
+[data-slot="shell.overlay"] button svg {
+  color: var(--dsm-coral);
+}
+
+[role="dialog"] button[class*="_navCell"],
+[data-slot="shell.overlay"] button[class*="_navCell"] {
+  border: 1px solid transparent;
+  padding: 9px 12px;
+}
+
+[role="dialog"] button[class*="_navCell"]:hover,
+[data-slot="shell.overlay"] button[class*="_navCell"]:hover {
+  background: color-mix(in srgb, var(--dsm-mint) 18%, transparent);
+  border-color: color-mix(in srgb, var(--dsm-mint) 48%, transparent);
+}
+
+[role="dialog"] button[class*="_navCell"][class*="_active"],
+[data-slot="shell.overlay"] button[class*="_navCell"][class*="_active"] {
+  background: color-mix(in srgb, var(--dsm-mint) 24%, var(--dsw-alias-bg-layer-1)) !important;
+  border-color: var(--dsm-coral);
+  box-shadow: inset 4px 0 0 var(--dsm-coral), 2px 3px 0 color-mix(in srgb, var(--dsm-sun) 54%, transparent);
+}
+
+[role="dialog"] button[class*="_selector"],
+[data-slot="shell.overlay"] button[class*="_selector"] {
+  background: color-mix(in srgb, var(--dsm-mint) 14%, var(--dsw-alias-bg-layer-1));
+  border: 1.5px solid color-mix(in srgb, var(--dsm-mint) 44%, transparent);
+  box-shadow: 0 3px 0 color-mix(in srgb, var(--dsm-sun) 40%, transparent);
+}
+
+[role="dialog"] button[class*="_themeCube"],
+[data-slot="shell.overlay"] button[class*="_themeCube"] {
+  border: 2px solid color-mix(in srgb, var(--dsm-coral) 36%, transparent) !important;
+  background: color-mix(in srgb, var(--dsm-sun) 10%, var(--dsw-alias-bg-layer-1));
+  box-shadow: 3px 4px 0 color-mix(in srgb, var(--dsm-mint) 34%, transparent);
+}
+
+[role="dialog"] button[class*="_themeCube"][aria-pressed="true"],
+[data-slot="shell.overlay"] button[class*="_themeCube"][aria-pressed="true"] {
+  border-color: var(--dsm-coral) !important;
+  background: color-mix(in srgb, var(--dsm-mint) 28%, var(--dsw-alias-bg-layer-1)) !important;
+  box-shadow: inset 5px 0 0 var(--dsm-coral), 4px 5px 0 var(--dsm-sun);
+}
+
+/* 深色模式下让糖果底板仍保持对比度 */
+html[style*="color-scheme: dark"] button[class*="_iconButton"],
+html[style*="color-scheme:dark"] button[class*="_iconButton"],
+html[style*="color-scheme: dark"] button[class$="_action"],
+html[style*="color-scheme:dark"] button[class$="_action"] {
+  color: var(--dsm-cream);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button {
+    transition: none;
+  }
+
+  button:not(:disabled):hover,
+  button:not(:disabled):active {
+    transform: none;
+  }
+}
+
+/* ============================================================
+   Readability + immersive mascot interactions
+   ============================================================ */
+
+/* 只移除欢迎页装饰文案，不影响头像、工作区或输入框 */
+[class$="_headlineText"],
+[class$="_previewBadge"] {
+  display: none !important;
+}
+
+[class$="_headline"] {
+  grid-template-columns: 66px !important;
+  min-height: 70px;
+}
+
+/* 为聊天正文加局部阅读玻璃；背景仍透出，文字保持清楚 */
+[data-slot="conversation.session"] {
+  --dsw-alias-label-primary: #1c3350 !important;
+  --dsw-alias-label-secondary: #48617e !important;
+}
+
+[data-slot="conversation.session"] > [class$="_viewArea"] {
+  isolation: isolate;
+  position: relative;
+}
+
+[data-slot="conversation.session"] > [class$="_viewArea"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 1;
+  background: linear-gradient(90deg,
+    rgba(244, 250, 255, .94) 0%,
+    rgba(244, 250, 255, .88) 68%,
+    rgba(244, 250, 255, .72) 100%);
+  -webkit-backdrop-filter: blur(2px) saturate(.88);
+  backdrop-filter: blur(2px) saturate(.88);
+  transition: opacity .2s ease, backdrop-filter .2s ease;
+}
+
+[data-slot="conversation.session"] > [class$="_viewArea"] > * {
+  position: relative;
+  z-index: 1;
+}
+
+html[style*="color-scheme: dark"] [data-slot="conversation.session"] > [class$="_viewArea"]::before,
+html[style*="color-scheme:dark"] [data-slot="conversation.session"] > [class$="_viewArea"]::before {
+  background: linear-gradient(90deg,
+    rgba(9, 23, 40, .92) 0%,
+    rgba(9, 23, 40, .88) 68%,
+    rgba(9, 23, 40, .80) 100%);
+}
+
+html[style*="color-scheme: dark"] [data-slot="conversation.session"],
+html[style*="color-scheme:dark"] [data-slot="conversation.session"] {
+  --dsw-alias-label-primary: #eaf6ff !important;
+  --dsw-alias-label-secondary: #9fc3dd !important;
+}
+
+html.dsm-is-scrolling [data-slot="conversation.session"] > [class$="_viewArea"]::before {
+  opacity: 1;
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+
+/* 指针柔光由 interactions.js 更新，不捕获鼠标事件 */
+[class$="_frame"]::after {
+  background:
+    radial-gradient(24% 26% at var(--dsm-pointer-x, 78%) var(--dsm-pointer-y, 18%), rgba(111, 227, 212, .16), transparent 70%),
+    radial-gradient(42% 36% at 86% 14%, rgba(255, 209, 102, .14), transparent 64%),
+    radial-gradient(36% 34% at 10% 90%, rgba(77, 163, 255, .14), transparent 64%);
+}
+
+/* 按钮点击波纹与头像轻互动 */
+button[data-dsm-interactive] {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.dsm-ripple {
+  position: absolute;
+  z-index: -1;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  pointer-events: none;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--dsm-mint) 62%, var(--dsm-sun));
+  opacity: .72;
+  animation: dsm-ripple-pop .55s ease-out forwards;
+}
+
+@keyframes dsm-ripple-pop {
+  from { transform: scale(0); opacity: .72; }
+  to { transform: scale(13); opacity: 0; }
+}
+
+[data-slot="sidebar"] button[class*="_brand"]::before,
+[class$="_fishHitbox"] {
+  transform: perspective(420px) rotateX(var(--dsm-tilt-x, 0deg)) rotateY(var(--dsm-tilt-y, 0deg));
+  transform-origin: center;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+
+[data-slot="sidebar"] button[class*="_brand"]:hover::before,
+[class$="_fishHitbox"]:hover {
+  box-shadow: 4px 6px 0 var(--dsm-coral), 0 12px 30px rgba(33, 26, 25, .24);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dsm-ripple { display: none; }
+  [data-slot="sidebar"] button[class*="_brand"]::before,
+  [class$="_fishHitbox"] { transform: none !important; transition: none; }
+  html.dsm-is-scrolling [data-slot="conversation.session"] > [class$="_viewArea"]::before {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* 最终级联锁：确保新版深浅配色与三栏层级覆盖历史主题规则 */
+html[style*="color-scheme: dark"] body,
+html[style*="color-scheme:dark"] body {
+  --dsw-alias-bg-base: rgba(6, 17, 32, .88) !important;
+  --dsw-alias-bg-layer-1: rgba(13, 32, 54, .93) !important;
+  --dsw-alias-bg-layer-2: rgba(22, 48, 76, .90) !important;
+  --dsw-alias-bg-overlay: rgba(9, 23, 40, .97) !important;
+  --dsw-alias-label-primary: #eaf6ff !important;
+  --dsw-alias-label-primary-bluish: #d2f1ff !important;
+  --dsw-alias-label-primary-dimmed: #c3dcee !important;
+  --dsw-alias-label-secondary: #9fc3dd !important;
+  --dsw-alias-label-tertiary: #86acc8 !important;
+  --dsw-alias-label-caption: #7ba2bd !important;
+  --dsw-alias-label-dimmed: #6d95af !important;
+  --dsw-alias-border-l1: rgba(111, 227, 212, .22) !important;
+  --dsw-alias-border-l2: rgba(255, 209, 102, .30) !important;
+  --dsw-specific-sidebar-fill: rgba(8, 21, 38, .93) !important;
+}
+
+html[style*="color-scheme: light"] body,
+html[style*="color-scheme:light"] body {
+  --dsw-alias-bg-base: rgba(232, 244, 255, .88) !important;
+  --dsw-alias-bg-layer-1: rgba(244, 250, 255, .92) !important;
+  --dsw-alias-bg-layer-2: rgba(219, 236, 250, .86) !important;
+  --dsw-alias-bg-overlay: rgba(242, 249, 255, .97) !important;
+  --dsw-alias-label-primary: #122a42 !important;
+  --dsw-alias-label-primary-bluish: #0f4c66 !important;
+  --dsw-alias-label-primary-dimmed: #2f4a66 !important;
+  --dsw-alias-label-secondary: #3c5570 !important;
+  --dsw-alias-label-tertiary: #4a617a !important;
+  --dsw-alias-label-caption: #425a72 !important;
+  --dsw-alias-label-dimmed: #4e6580 !important;
+  --dsw-specific-sidebar-fill: rgba(242, 249, 255, .88) !important;
+}
+
+html[style*="color-scheme: light"] [class$="_sidebarCol"],
+html[style*="color-scheme:light"] [class$="_sidebarCol"] {
+  background: rgba(244, 250, 255, .94) !important;
+}
+
+html[style*="color-scheme: light"] [class$="_centerCol"],
+html[style*="color-scheme:light"] [class$="_centerCol"] {
+  background: rgba(244, 250, 255, .78) !important;
+}
+
+html[style*="color-scheme: light"] [class$="_detailsCol"],
+html[style*="color-scheme:light"] [class$="_detailsCol"],
+html[style*="color-scheme: light"] [data-slot="details"] > [class$="_root"],
+html[style*="color-scheme:light"] [data-slot="details"] > [class$="_root"] {
+  background: rgba(242, 249, 255, .86) !important;
+}
+
+html[style*="color-scheme: dark"] [class$="_sidebarCol"],
+html[style*="color-scheme:dark"] [class$="_sidebarCol"] {
+  background: rgba(8, 21, 38, .94) !important;
+}
+
+html[style*="color-scheme: dark"] [class$="_centerCol"],
+html[style*="color-scheme:dark"] [class$="_centerCol"] {
+  background: rgba(6, 15, 29, .82) !important;
+}
+
+html[style*="color-scheme: dark"] [class$="_detailsCol"],
+html[style*="color-scheme:dark"] [class$="_detailsCol"],
+html[style*="color-scheme: dark"] [data-slot="details"] > [class$="_root"],
+html[style*="color-scheme:dark"] [data-slot="details"] > [class$="_root"] {
+  background: rgba(11, 27, 48, .86) !important;
+}
+
+html[style*="color-scheme: dark"] [class$="_frame"]::before,
+html[style*="color-scheme:dark"] [class$="_frame"]::before {
+  filter: brightness(.55) saturate(.82) contrast(1.10) !important;
+}
+
+html[style*="color-scheme: light"] [class$="_frame"]::before,
+html[style*="color-scheme:light"] [class$="_frame"]::before {
+  filter: brightness(.98) saturate(.96) contrast(1.02) !important;
+}
+
+/* 清除原生 DeepSeek 蓝：运行状态、页签、链接与信息按钮统一主题色 */
+body {
+  --dsw-static-deepseek-500: var(--dsm-coral) !important;
+  --dsw-static-deepseek-200: var(--dsm-mint) !important;
+  --dsw-alias-state-business-primary: var(--dsm-coral) !important;
+  --dsw-alias-state-business-tertiary: color-mix(in srgb, var(--dsm-mint) 24%, transparent) !important;
+  --dsw-alias-button-info-fill: var(--dsm-coral) !important;
+  --dsw-alias-button-info-hover: color-mix(in srgb, var(--dsm-coral) 76%, var(--dsm-sun)) !important;
+}
+
+[class$="_turnStatus"] {
+  background: linear-gradient(90deg,
+    var(--dsm-coral) 0%,
+    var(--dsm-coral) 38%,
+    var(--dsm-mint) 50%,
+    var(--dsm-coral) 62%,
+    var(--dsm-coral) 100%) !important;
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+}

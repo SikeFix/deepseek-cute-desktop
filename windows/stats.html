@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Token 使用统计</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --coral: #f36b50;
+    --sun: #f5dc26;
+    --mint: #62e8d3;
+    --slate: #587273;
+    --ink: #211a19;
+    --cream: #fff1d7;
+    --card: rgba(255, 244, 223, .07);
+    --card-line: rgba(255, 241, 215, .16);
+    --text: #fff1d7;
+    --text-dim: rgba(255, 241, 215, .62);
+    --heat-0: rgba(255, 241, 215, .07);
+    --heat-1: rgba(98, 232, 211, .28);
+    --heat-2: rgba(98, 232, 211, .55);
+    --heat-3: rgba(98, 232, 211, .82);
+    --heat-4: #62e8d3;
+  }
+  html[data-color-scheme="light"] {
+    --card: rgba(33, 26, 25, .045);
+    --card-line: rgba(33, 26, 25, .12);
+    --text: #2c2420;
+    --text-dim: rgba(44, 36, 32, .6);
+    --heat-0: rgba(33, 26, 25, .06);
+    --heat-1: rgba(21, 165, 146, .38);
+    --heat-2: rgba(20, 152, 136, .62);
+    --heat-3: rgba(18, 138, 122, .84);
+    --heat-4: #128f7f;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Segoe UI", "Microsoft YaHei", sans-serif;
+    background:
+      radial-gradient(52% 40% at 88% -6%, rgba(245, 220, 38, .16), transparent 62%),
+      radial-gradient(44% 36% at -8% 104%, rgba(98, 232, 211, .14), transparent 60%),
+      linear-gradient(160deg, #23201f, #26231f 48%, #2b2a26);
+    color: var(--text);
+    padding: 24px clamp(16px, 3vw, 34px) 44px;
+  }
+  html[data-color-scheme="light"] body {
+    background:
+      radial-gradient(52% 40% at 88% -6%, rgba(245, 220, 38, .34), transparent 62%),
+      radial-gradient(44% 36% at -8% 104%, rgba(98, 232, 211, .28), transparent 60%),
+      linear-gradient(160deg, #fbf3e4, #f6ecd9 48%, #f3ead6);
+  }
+  .wrap { max-width: 1020px; margin: 0 auto; }
+
+  header.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+  .title { display: flex; align-items: center; gap: 13px; }
+  .title .logo {
+    width: 40px; height: 40px; border-radius: 13px; flex: none;
+    background: linear-gradient(135deg, var(--coral), var(--sun) 90%);
+    display: grid; place-items: center; font-size: 19px; color: #fff;
+    box-shadow: 0 6px 18px rgba(243, 107, 80, .4), inset 0 1px 0 rgba(255,255,255,.35);
+  }
+  .title h1 { font-size: 20px; font-weight: 800; letter-spacing: .01em; }
+  .title p { font-size: 12px; color: var(--text-dim); margin-top: 3px; }
+  .top-actions { display: flex; gap: 8px; align-items: center; }
+  .seg { display: flex; padding: 3px; border-radius: 999px; background: var(--card); border: 1px solid var(--card-line); box-shadow: inset 0 1px 2px rgba(0,0,0,.04); }
+  .seg button {
+    border: 0; background: transparent; color: var(--text-dim);
+    font: 650 12px/1 inherit; padding: 7px 14px; border-radius: 999px; cursor: pointer;
+    transition: all .16s ease;
+  }
+  .seg button.on { background: linear-gradient(135deg, var(--coral), #f28b4c); color: #fff; box-shadow: 0 3px 10px rgba(243, 107, 80, .42); }
+  .ghost-btn {
+    border: 1px solid var(--card-line); background: var(--card); color: var(--text);
+    font: 650 12px/1 inherit; padding: 9px 15px; border-radius: 999px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px; transition: all .16s ease;
+  }
+  .ghost-btn:hover { border-color: var(--mint); color: var(--mint); transform: translateY(-1px); }
+  .ghost-btn:disabled { opacity: .55; cursor: wait; transform: none; }
+
+  .cards {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 13px; margin-bottom: 16px;
+  }
+  @media (max-width: 760px) { .cards { grid-template-columns: repeat(2, 1fr); } }
+  .card {
+    background: var(--card); border: 1px solid var(--card-line); border-radius: 18px;
+    padding: 15px 17px 14px; position: relative; overflow: hidden;
+    transition: transform .18s ease, box-shadow .18s ease;
+  }
+  html[data-color-scheme="light"] .card { background: rgba(255,252,244,.72); box-shadow: 0 2px 10px rgba(146,106,46,.07); }
+  html[data-color-scheme="dark"] .card { background: rgba(255,244,223,.06); }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 10px 26px rgba(60,40,20,.14); }
+  .card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .card .k { font-size: 12px; color: var(--text-dim); font-weight: 650; }
+  .card .ic {
+    width: 27px; height: 27px; border-radius: 9px; flex: none;
+    display: grid; place-items: center; font-size: 13.5px; color: #fff;
+    background: var(--ic, linear-gradient(135deg, var(--coral), var(--sun)));
+    box-shadow: 0 3px 9px rgba(30,20,10,.18), inset 0 1px 0 rgba(255,255,255,.3);
+  }
+  .card .v {
+    font-size: 26px; font-weight: 800; margin-top: 9px; letter-spacing: .01em;
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .card .v small { font-size: 13px; font-weight: 700; color: var(--text-dim); margin-left: 3px; }
+  .card .s { font-size: 11px; color: var(--text-dim); margin-top: 6px; line-height: 1.55; }
+
+  .panel {
+    background: var(--card); border: 1px solid var(--card-line); border-radius: 20px;
+    padding: 19px 20px 17px; margin-bottom: 16px;
+  }
+  html[data-color-scheme="light"] .panel { background: rgba(255,252,244,.72); box-shadow: 0 2px 12px rgba(146,106,46,.08); }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .panel-head h2 { font-size: 15px; font-weight: 780; letter-spacing: .01em; }
+  .panel-head .hint { font-size: 11px; color: var(--text-dim); }
+
+  /* 热力图: 周格(30日) / 单日行(7日), 右侧摘要区 */
+  .heat-scroll { overflow-x: auto; padding-bottom: 4px; }
+  .heat-area { display: flex; align-items: center; gap: 36px; min-width: max-content; }
+  .heat-wrap { display: flex; gap: 10px; min-width: max-content; }
+  .heat-months { display: flex; gap: 6px; margin-left: 34px; min-width: max-content; }
+  .heat-months span { font-size: 10.5px; color: var(--text-dim); font-weight: 600; height: 16px; display: flex; align-items: center; white-space: nowrap; width: 28px; flex: none; }
+  .heat { display: flex; gap: 6px; min-width: max-content; }
+  .heat .week { display: flex; flex-direction: column; gap: 6px; }
+  .heat .cell {
+    width: 22px; height: 22px; border-radius: 7px; background: var(--heat-0);
+    position: relative; transition: transform .12s ease;
+  }
+  html[data-color-scheme="light"] .heat .cell { background: rgba(33,26,25,.06); }
+  .heat .cell.future, .heat .cell.empty { background: transparent; }
+  .heat .cell[data-tip]:hover { transform: scale(1.22); z-index: 2; outline: 1.5px solid var(--mint); }
+  .heat .cell.l1 { background: var(--heat-1); }
+  .heat .cell.l2 { background: var(--heat-2); }
+  .heat .cell.l3 { background: var(--heat-3); }
+  .heat .cell.l4 { background: var(--heat-4); box-shadow: 0 0 8px rgba(98, 232, 211, .5); }
+  .heat-wrap .dow { display: flex; flex-direction: column; gap: 6px; width: 24px; flex: none; }
+  .heat-wrap .dow span { height: 22px; font-size: 10.5px; color: var(--text-dim); font-weight: 600; display: flex; align-items: center; }
+  /* 7 日单日行: 大号圆角格 + 日期标签 */
+  .heat-dayrow { display: flex; gap: 12px; flex-wrap: wrap; }
+  .heat-dayrow .daycell { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .heat-dayrow .cell {
+    width: 52px; height: 52px; border-radius: 16px;
+    display: grid; place-items: center;
+    font-size: 13px; font-weight: 800; color: var(--text);
+    font-variant-numeric: tabular-nums;
+    box-shadow: inset 0 0 0 1px var(--card-line);
+  }
+  .heat-dayrow .cell .inner { font-size: 11.5px; font-weight: 750; opacity: .92; }
+  .heat-dayrow .d { font-size: 11px; color: var(--text-dim); font-weight: 600; }
+  /* 摘要区: 填平网格右侧留白 */
+  .heat-summary {
+    flex: 1; min-width: 220px;
+    display: grid; grid-template-columns: repeat(2, minmax(150px, 1fr)); gap: 12px 20px;
+    align-self: stretch; align-content: center;
+  }
+  .hs {
+    display: flex; flex-direction: column; gap: 4px;
+    padding: 11px 14px; border-radius: 14px;
+    background: var(--chip-bg, rgba(120,110,90,.07));
+    border: 1px solid var(--card-line);
+  }
+  html[data-color-scheme="light"] .hs { background: rgba(255,252,244,.8); }
+  .hs .k { font-size: 11px; color: var(--text-dim); font-weight: 600; }
+  .hs .v { font-size: 14.5px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hs .v small { font-size: 11px; font-weight: 650; color: var(--text-dim); margin-left: 4px; }
+  .legend { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-dim); margin-top: 14px; }
+  .legend .cell { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+
+  /* 趋势图 */
+  .trend { display: flex; align-items: flex-end; gap: 6px; height: 150px; padding-top: 8px; }
+  .trend .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end; min-width: 0; }
+  .trend .bar {
+    width: 100%; max-width: 46px; border-radius: 7px 7px 3px 3px; position: relative;
+    background: linear-gradient(180deg, var(--mint), rgba(98, 232, 211, .55));
+    min-height: 3px; transition: height .4s cubic-bezier(.2, .8, .3, 1);
+  }
+  .trend .bar.peak { background: linear-gradient(180deg, var(--sun), rgba(245, 220, 38, .5)); box-shadow: 0 0 12px rgba(245, 220, 38, .35); }
+  .trend .bar-val { font-size: 10px; color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .trend .bar-day { font-size: 10px; color: var(--text-dim); white-space: nowrap; }
+
+  /* 模型用量 */
+  .models { display: flex; flex-direction: column; gap: 11px; }
+  .model-row { display: grid; grid-template-columns: minmax(120px, 220px) 1fr auto; gap: 12px; align-items: center; }
+  .model-name { font-size: 12.5px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .model-name .prov { color: var(--text-dim); font-weight: 500; font-size: 11px; margin-left: 6px; }
+  .model-bar { height: 9px; border-radius: 999px; background: var(--heat-0); overflow: hidden; }
+  .model-bar i {
+    display: block; height: 100%; border-radius: 999px;
+    background: linear-gradient(90deg, var(--coral), var(--sun));
+    transition: width .5s cubic-bezier(.2, .8, .3, 1);
+  }
+  .model-row .num { font-size: 11.5px; color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .model-row .num b { color: var(--text); font-weight: 750; }
+
+  footer.meta { text-align: center; font-size: 11px; color: var(--text-dim); margin-top: 6px; line-height: 1.7; }
+  .empty-note { text-align: center; color: var(--text-dim); font-size: 13px; padding: 40px 0; line-height: 1.8; }
+
+  /* tooltip */
+  #tip {
+    position: fixed; z-index: 10; pointer-events: none; opacity: 0; transition: opacity .12s ease;
+    background: #171312ee; color: #fff1d7; font-size: 11.5px; line-height: 1.5;
+    padding: 7px 10px; border-radius: 9px; border: 1px solid rgba(98, 232, 211, .4);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .4); max-width: 220px; white-space: nowrap;
+  }
+  @media (max-width: 640px) {
+    .model-row { grid-template-columns: 1fr auto; }
+    .model-bar { grid-column: 1 / -1; order: 3; }
+  }
+</style>
+</head>
+<body>
+<div id="tip"></div>
+<div class="wrap">
+  <header class="top">
+    <div class="title">
+      <div class="logo">✦</div>
+      <div>
+        <h1>Token 使用统计</h1>
+        <p id="subTitle">数据来自本地 DSH 会话日志，不经过云端</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <div class="seg" id="rangeSeg">
+        <button data-range="7">近 7 日</button>
+        <button data-range="30" class="on">近 30 日</button>
+      </div>
+      <button class="ghost-btn" id="refreshBtn" title="重新扫描本地日志">⟳ 刷新</button>
+    </div>
+  </header>
+
+  <section class="cards" id="cards"></section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Token 活动</h2>
+      <div class="top-actions">
+        <div class="seg" id="heatSeg">
+          <button data-mode="daily" class="on">每日</button>
+          <button data-mode="weekly">每周</button>
+          <button data-mode="cumulative">累计</button>
+        </div>
+      </div>
+    </div>
+    <div class="heat-scroll">
+      <div class="heat-area">
+        <div id="heatGrid">
+          <div class="heat-months" id="heatMonths"></div>
+          <div class="heat-wrap">
+            <div class="dow" id="dow"></div>
+            <div class="heat" id="heat"></div>
+          </div>
+        </div>
+        <div class="heat-dayrow" id="dayrow" style="display:none"></div>
+        <div class="heat-summary" id="heatSummary"></div>
+      </div>
+    </div>
+    <div class="legend">
+      少 <span class="cell" style="background:var(--heat-0)"></span>
+      <span class="cell l1"></span><span class="cell l2"></span><span class="cell l3"></span><span class="cell l4"></span> 多
+      <span style="margin-left:10px" id="heatHint"></span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>每日 Token 趋势</h2>
+      <span class="hint" id="trendHint"></span>
+    </div>
+    <div class="trend" id="trend"></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>模型用量</h2>
+      <span class="hint">按累计 Token 排序（全部时间）</span>
+    </div>
+    <div class="models" id="models"></div>
+  </section>
+
+  <footer class="meta" id="meta"></footer>
+</div>
+
+<script>
+  // 宿主应用( macOS Swift / Windows Electron )加载本页面时,
+  // 会把 usage-stats.mjs 的输出注入到下面这个占位符。
+  const DSM_STATS = /*__DSM_STATS_DATA__*/null;
+
+  let DATA = null;
+  try { DATA = typeof DSM_STATS === 'object' ? DSM_STATS : null; } catch (_) { DATA = null; }
+
+  let rangeDays = 30;
+  let heatMode = 'daily';
+
+  const $ = (sel) => document.querySelector(sel);
+
+  /* ---------- 数字格式化 ---------- */
+  function fmtTokens(n) {
+    if (!n || n <= 0) return '0';
+    if (n >= 1e8) return (n / 1e8).toFixed(n >= 1e9 ? 0 : 1) + '亿';
+    if (n >= 1e4) return (n / 1e4).toFixed(n >= 1e6 ? 0 : 1) + '万';
+    return String(Math.round(n));
+  }
+  function fmtExact(n) {
+    return n ? n.toLocaleString('zh-CN') : '0';
+  }
+  function fmtMinutes(min) {
+    if (min == null || min <= 0) return '0 分钟';
+    if (min < 60) return Math.round(min) + ' 分钟';
+    const h = Math.floor(min / 60);
+    const m = Math.round(min % 60);
+    if (h < 24) return m ? h + ' 小时 ' + m + ' 分' : h + ' 小时';
+    const d = Math.floor(h / 24);
+    const hh = h % 24;
+    return d + ' 天' + (hh ? ' ' + hh + ' 小时' : '');
+  }
+  // 卡片主数值用紧凑版, 避免换行
+  function fmtMinutesShort(min) {
+    if (min == null || min <= 0) return '0分钟';
+    if (min < 60) return Math.round(min) + '分钟';
+    const h = Math.floor(min / 60);
+    const m = Math.round(min % 60);
+    if (h < 24) return m ? h + '小时' + m + '分' : h + '小时';
+    const d = Math.floor(h / 24);
+    const hh = h % 24;
+    return d + '天' + (hh ? hh + '小时' : '');
+  }
+  function pad2(x) { return String(x).padStart(2, '0'); }
+  function dayStr(ts) {
+    const d = new Date(ts);
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+  function shortDay(key) {
+    const p = key.split('-');
+    return (+p[1]) + '/' + (+p[2]);
+  }
+
+  /* ---------- 卡片 ---------- */
+  function renderCards() {
+    const d = DATA;
+    if (!d) return;
+    const days = Object.keys(d.perDay || {}).sort();
+    const inRange = days.filter((k) => withinRange(k));
+    const peak = inRange.length ? Math.max(...inRange.map((k) => d.perDay[k])) : 0;
+    const peakDay = inRange.length ? inRange[inRange.indexOf(inRange.reduce((a, b) => d.perDay[b] > d.perDay[a] ? b : a, inRange[0]))] : '';
+    const rangeTotal = inRange.reduce((s, k) => s + d.perDay[k], 0);
+    const cards = [
+      { k: '累计 Token 数', v: fmtTokens(d.totalTokens), sub: '输入 ' + fmtTokens(d.inputTokens) + ' · 输出 ' + fmtTokens(d.outputTokens), ic: '📊', grad: 'linear-gradient(135deg,#f36b50,#f5a626)' },
+      { k: '峰值 Token 数', v: fmtTokens(peak), sub: peakDay ? '单日最高 ' + shortDay(peakDay) : '该时间段暂无', ic: '🔥', grad: 'linear-gradient(135deg,#f2994c,#f5dc26)' },
+      { k: '最长聊天时长', v: fmtMinutesShort(d.longestTurnMinutes), sub: '单次最长对话 ' + fmtMinutes(d.longestSessionMinutes), ic: '⏱️', grad: 'linear-gradient(135deg,#2bbfae,#62e8d3)' },
+      { k: '当前连续天数', v: d.currentStreak, unit: '天', sub: d.currentStreak ? '保持中，加油 ✦' : '今天开始用起来吧', ic: '⚡', grad: 'linear-gradient(135deg,#f36b50,#fb923c)' },
+      { k: '最长连续天数', v: d.longestStreak, unit: '天', sub: '历史最佳纪录', ic: '🏆', grad: 'linear-gradient(135deg,#8a6d3b,#d9b45a)' },
+      { k: '对话轮数', v: fmtTokens(d.turns), sub: d.sessions + ' 个本地会话 · 近' + rangeDays + '日 ' + fmtTokens(rangeTotal), ic: '💬', grad: 'linear-gradient(135deg,#587273,#7fa3a4)' },
+    ];
+    $('#cards').innerHTML = cards.map((c) =>
+      '<div class="card">' +
+      '<div class="card-top"><span class="k">' + c.k + '</span><span class="ic" style="--ic:' + c.grad + '">' + c.ic + '</span></div>' +
+      '<div class="v">' + c.v + (c.unit ? '<small>' + c.unit + '</small>' : '') + '</div>' +
+      '<div class="s">' + c.sub + '</div>' +
+      '</div>'
+    ).join('');
+  }
+
+  /* ---------- 时间范围 ---------- */
+  function todayKey() { return dayStr(Date.now()); }
+  function withinRange(key) {
+    const start = Date.now() - (rangeDays - 1) * 86400000;
+    return key >= dayStr(start) && key <= todayKey();
+  }
+
+  /* ---------- 热力图 ---------- */
+  const DOW = ['一', '二', '三', '四', '五', '六', '日'];
+  const mondayOf = (ts) => ts - ((new Date(ts).getDay() + 6) % 7) * 86400000;
+
+  function renderHeat() {
+    const d = DATA;
+    const grid = $('#heatGrid'), row = $('#dayrow');
+    if (!d || !d.perDay) { grid.style.display = 'none'; row.style.display = 'none'; return; }
+    const perDay = d.perDay;
+    const nowFull = new Date();
+    const now = new Date(nowFull.getFullYear(), nowFull.getMonth(), nowFull.getDate());
+    const today = todayKey();
+
+    // 窗口 = 最近 rangeDays 天(含今天)
+    const cells = [];
+    for (let i = rangeDays - 1; i >= 0; i -= 1) {
+      const ts = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i).getTime();
+      const key = dayStr(ts);
+      cells.push({ key, ts, daily: perDay[key] || 0 });
+    }
+    // 自然周(周一开始)汇总
+    const weekSum = new Map();
+    for (const c of cells) weekSum.set(mondayOf(c.ts), (weekSum.get(mondayOf(c.ts)) || 0) + c.daily);
+    // 历史累计(含窗口之前)
+    const allKeys = Object.keys(perDay).sort();
+    let cum = 0;
+    for (const k of allKeys) if (k < cells[0].key) cum += perDay[k];
+    for (const c of cells) { cum += c.daily; c.cum = cum; }
+
+    const valueOf = (c) => heatMode === 'daily' ? c.daily : heatMode === 'weekly' ? (weekSum.get(mondayOf(c.ts)) || 0) : c.cum;
+    const vals = cells.map(valueOf).filter((v) => v > 0).sort((a, b) => a - b);
+    const levelOf = (v) => {
+      if (v <= 0 || !vals.length) return 0;
+      let lo = 0, hi = vals.length;
+      while (lo < hi) { const mid = (lo + hi) >> 1; if (vals[mid] <= v) lo = mid + 1; else hi = mid; }
+      const p = lo / vals.length;
+      if (p < 0.5) return 1;
+      if (p < 0.75) return 2;
+      if (p < 0.92) return 3;
+      return 4;
+    };
+    const tipOf = (c) => c.key + ' · ' + fmtTokens(valueOf(c)) + ' Token' + (valueOf(c) === 0 ? ' · 无记录' : '');
+
+    if (rangeDays <= 7) {
+      // 单日行: 大号圆角格 + 日期
+      grid.style.display = 'none'; row.style.display = '';
+      row.innerHTML = cells.map((c) => {
+        const lv = levelOf(valueOf(c));
+        const p = c.key.split('-');
+        return '<div class="daycell">' +
+          '<div class="cell' + (lv ? ' l' + lv : '') + '" data-tip="' + tipOf(c).replace(/"/g, '&quot;') + '">' +
+          '<span class="inner">' + (valueOf(c) ? fmtTokens(valueOf(c)) : '—') + '</span></div>' +
+          '<div class="d">' + (+p[1]) + '/' + (+p[2]) + (c.key === today ? ' · 今天' : '') + '</div>' +
+          '</div>';
+      }).join('');
+    } else {
+      // 周格: 对齐周一, 首尾补空位, 顶部月份标签
+      grid.style.display = ''; row.style.display = 'none';
+      $('#dow').innerHTML = DOW.map((s) => '<span>' + s + '</span>').join('');
+      const weeks = [];
+      let curW = null;
+      for (const c of cells) {
+        const m = mondayOf(c.ts);
+        if (!curW || curW.monday !== m) { curW = { monday: m, cells: [] }; weeks.push(curW); }
+        curW.cells.push(c);
+      }
+      const firstDow = (new Date(cells[0].ts).getDay() + 6) % 7;
+      if (firstDow > 0) weeks[0].cells = Array(firstDow).fill(null).concat(weeks[0].cells);
+      const lastW = weeks[weeks.length - 1];
+      while (lastW.cells.length < 7) lastW.cells.push(null);
+      $('#heat').innerHTML = weeks.map((w) =>
+        '<div class="week">' + w.cells.map((c) => {
+          if (!c) return '<div class="cell empty"></div>';
+          const lv = levelOf(valueOf(c));
+          return '<div class="cell' + (lv ? ' l' + lv : '') + '" data-tip="' + tipOf(c).replace(/"/g, '&quot;') + '"></div>';
+        }).join('') + '</div>'
+      ).join('');
+      let prevMonth = '';
+      $('#heatMonths').innerHTML = weeks.map((w) => {
+        const first = w.cells.find((c) => c);
+        const m = first ? first.key.slice(5, 7) : '';
+        const label = m && m !== prevMonth ? (+m) + '月' : '';
+        if (m) prevMonth = m;
+        return '<span>' + label + '</span>';
+      }).join('');
+    }
+    const hints = { daily: '按每天实际用量着色', weekly: '按自然周（周一开始）用量着色', cumulative: '按历史累计用量着色' };
+    $('#heatHint').textContent = hints[heatMode];
+    // 摘要区: 填平网格右侧留白
+    const rangeTotal = cells.reduce((a, c) => a + c.daily, 0);
+    const activeDays = cells.filter((c) => c.daily > 0).length;
+    const peak = cells.reduce((a, c) => (c.daily > (a ? a.daily : 0) ? c : a), null);
+    const dStr = (key) => { const p = key.split('-'); return (+p[1]) + '/' + (+p[2]); };
+    $('#heatSummary').innerHTML =
+      '<div class="hs"><span class="k">区间合计</span><span class="v">' + fmtTokens(rangeTotal) + '<small>Token</small></span></div>' +
+      '<div class="hs"><span class="k">日均用量</span><span class="v">' + fmtTokens(Math.round(rangeTotal / rangeDays)) + '<small>Token/日</small></span></div>' +
+      '<div class="hs"><span class="k">活跃天数</span><span class="v">' + activeDays + '<small>/ ' + rangeDays + ' 天</small></span></div>' +
+      '<div class="hs"><span class="k">峰值单日</span><span class="v">' + (peak ? dStr(peak.key) : '—') + (peak && peak.daily ? '<small>' + fmtTokens(peak.daily) + '</small>' : '') + '</span></div>';
+    bindTips();
+  }
+
+  /* ---------- tooltip ---------- */
+  const tip = $('#tip');
+  function bindTips() {
+    $('#heat').querySelectorAll('.cell[data-tip]').forEach((el) => {
+      el.addEventListener('mouseenter', () => {
+        tip.textContent = el.dataset.tip;
+        tip.style.opacity = '1';
+        const r = el.getBoundingClientRect();
+        tip.style.left = Math.min(r.left, window.innerWidth - tip.offsetWidth - 8) + 'px';
+        tip.style.top = (r.top - tip.offsetHeight - 8) + 'px';
+      });
+      el.addEventListener('mouseleave', () => { tip.style.opacity = '0'; });
+    });
+  }
+
+  /* ---------- 趋势图 ---------- */
+  function renderTrend() {
+    const d = DATA;
+    const el = $('#trend');
+    if (!d || !d.perDay) { el.innerHTML = ''; return; }
+    const days = [];
+    for (let i = rangeDays - 1; i >= 0; i -= 1) {
+      const key = dayStr(Date.now() - i * 86400000);
+      days.push({ key, v: d.perDay[key] || 0 });
+    }
+    const max = Math.max(...days.map((x) => x.v), 1);
+    $('#trendHint').textContent = '近 ' + rangeDays + ' 日 · 单日最高 ' + fmtTokens(max);
+    el.innerHTML = days.map((x) => {
+      const h = Math.max(2, Math.round(x.v / max * 108));
+      return '<div class="bar-col">' +
+        '<div class="bar-val">' + (x.v ? fmtTokens(x.v) : '') + '</div>' +
+        '<div class="bar' + (x.v === max && x.v > 0 ? ' peak' : '') + '" style="height:' + h + 'px" title="' + x.key + ' · ' + fmtExact(x.v) + ' Token"></div>' +
+        '<div class="bar-day">' + shortDay(x.key) + '</div>' +
+        '</div>';
+    }).join('');
+  }
+
+  /* ---------- 模型用量 ---------- */
+  function renderModels() {
+    const d = DATA;
+    const el = $('#models');
+    if (!d) { el.innerHTML = ''; return; }
+    const models = Object.entries(d.perModel || {});
+    if (!models.length) { el.innerHTML = '<div class="empty-note">还没有模型用量记录</div>'; return; }
+    const total = models.reduce((s, [, v]) => s + v, 0) || 1;
+    el.innerHTML = models.slice(0, 12).map(([name, v]) => {
+      const pct = v / total;
+      return '<div class="model-row">' +
+        '<div class="model-name" title="' + name.replace(/"/g, '&quot;') + '">' + name + '</div>' +
+        '<div class="model-bar"><i style="width:' + Math.max(2, pct * 100).toFixed(1) + '%"></i></div>' +
+        '<div class="num"><b>' + fmtTokens(v) + '</b> · ' + (pct * 100).toFixed(1) + '%</div>' +
+        '</div>';
+    }).join('');
+  }
+
+  /* ---------- 页脚 ---------- */
+  function renderMeta() {
+    const d = DATA;
+    const el = $('#meta');
+    if (!d) {
+      el.innerHTML = '未能读取本地统计。<br>点击右上「刷新」重试，或确认应用内置运行时已就绪。';
+      return;
+    }
+    const gen = new Date(d.generatedAt);
+    const scanned = d.meta || {};
+    el.innerHTML = '统计生成于 ' + gen.toLocaleString('zh-CN') +
+      ' · 扫描 ' + (scanned.scanned != null ? scanned.scanned : 0) + ' 个会话文件' +
+      (scanned.cached ? '（缓存 ' + scanned.cached + '）' : '') +
+      ' · 全部数据仅保存在本机';
+  }
+
+  function renderAll() { renderCards(); renderHeat(); renderTrend(); renderModels(); renderMeta(); }
+
+  /* ---------- 控件 ---------- */
+  $('#rangeSeg').addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    rangeDays = +btn.dataset.range;
+    $('#rangeSeg').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b === btn));
+    renderCards(); renderHeat(); renderTrend();
+  });
+  $('#heatSeg').addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    heatMode = btn.dataset.mode;
+    $('#heatSeg').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b === btn));
+    renderHeat();
+  });
+
+  async function refresh() {
+    const btn = $('#refreshBtn');
+    btn.disabled = true;
+    btn.textContent = '⟳ 扫描中…';
+    try {
+      let fresh = null;
+      if (window.dsmStats && window.dsmStats.refresh) {
+        fresh = await window.dsmStats.refresh();
+      } else if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.dsmStats) {
+        // macOS: 通过 Promise 桥 —— 宿主用 callHandler 的回调返回
+        fresh = await new Promise((resolve) => {
+          window.__dsmStatsResolve = resolve;
+          window.webkit.messageHandlers.dsmStats.postMessage('refresh');
+          setTimeout(() => { if (window.__dsmStatsResolve) { window.__dsmStatsResolve(null); window.__dsmStatsResolve = null; } }, 30000);
+        });
+      }
+      if (fresh && typeof fresh === 'object' && fresh.totalTokens != null) {
+        DATA = fresh;
+        renderAll();
+      }
+    } catch (_) {}
+    btn.disabled = false;
+    btn.textContent = '⟳ 刷新';
+  }
+  $('#refreshBtn').addEventListener('click', refresh);
+
+  // 深色/浅色跟随主题( 宿主可在加载时设置 data-color-scheme )
+  const mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  function applyScheme() {
+    document.documentElement.dataset.colorScheme = mq && !mq.matches ? 'light' : 'dark';
+  }
+  applyScheme();
+  if (mq && mq.addEventListener) mq.addEventListener('change', applyScheme);
+
+  renderAll();
+  // 暴露给宿主注入
+  window.__dsmStatsInject = (data) => { DATA = data; renderAll(); };
+</script>
+</body>
+</html>

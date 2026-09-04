@@ -1,6 +1,6 @@
 {
   "name": "deepseek-cute-desktop-windows",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "DeepSeek Harness themed Windows desktop app with a task-aware desktop pet",
   "main": "main.js",
   "author": "sikefix",
@@ -33,10 +33,13 @@
     "files": [
       "main.js",
       "preload.js",
+      "studio-preload.js",
       "model-setup-preload.js",
       "model-setup.html",
       "pet-preload.js",
       "window-inject.js",
+      "theme-studio.html",
+      "stats.html",
       "waiting.html",
       "pet.html",
       "scripts/after-pack.js",
@@ -59,6 +62,10 @@
       {
         "from": "runtime/node_modules",
         "to": "runtime/dsh/node_modules"
+      },
+      {
+        "from": "usage-stats.mjs",
+        "to": "runtime/usage-stats.mjs"
       },
       {
         "from": "runtime/licenses",

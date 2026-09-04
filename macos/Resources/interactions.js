@@ -85,6 +85,8 @@
     servicePill.dataset.state = status;
     servicePill.querySelector('.dsm-service-label').textContent = labels[status] || labels.offline;
     servicePill.title = status === 'online' ? 'DeepSeek 服务运行正常' : '点击尝试恢复本地服务';
+    // 顶栏状态胶囊(app-chrome 层)接管展示, 同步状态
+    if (window.__dsmSetTopStatus) window.__dsmSetTopStatus(status);
   };
 
   servicePill.addEventListener('click', () => {
