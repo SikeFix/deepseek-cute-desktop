@@ -4,10 +4,11 @@ const path = require('node:path');
 // 打包后瘦身: 删除 dsh node_modules 里与 win32-x64 运行无关的文件,
 // 直接减小 NSIS 安装体积(源码映射/测试/文档/其它平台的原生预编译)。
 
+// 只删"点目录": npm 包名不能以 . 开头, 这些目录绝不可能是运行时包。
+// 曾经按 test/doc/spec 等普通目录名删除, 误删过 @standard-schema/spec
+// (npm 包) 和 yaml/dist/doc (运行时模块), 导致 Windows 后端启动即崩。
 const PRUNE_DIR_NAMES = new Set([
-  'test', 'tests', '__tests__', '__test__', 'spec', 'specs',
-  'examples', 'example', 'docs', 'doc', '.github', '.vscode',
-  'bench', 'benchmark', 'coverage', '.vite', '.cache', 'fixture', 'fixtures'
+  '.github', '.vscode', '.vite', '.cache'
 ]);
 
 // 只删确定与运行无关的文件: 源码映射 + 文档 + 编辑器配置。
