@@ -1,33 +1,41 @@
-# DeepSeek Cute Desktop 1.6.0
+# DeepSeek Cute Desktop 1.7.0
 
-本次双端更新：界面主题可自由切换、新增模型服务设置（官方 DeepSeek / 本地千问），并升级到支持最新图片模型的 DeepSeek Harness 0.1.1-rc.2 内核。
+多主题 + 主题工坊 + Token 使用统计 + 双端顶栏重做 + 稳定性/安装体验优化。
 
-## 双端新功能
+## 本次更新(2026-09-04)
 
-- 主题切换：标题栏一键在「DeepSeek 官方样式」和「正太主题」之间切换，选择自动保存；托盘/菜单栏同样可切
-- 模型服务设置向导：可选择 DeepSeek 官方，或本地千问兼容接口（默认 qwen3.8-27b）
-- 千问 API 密钥加密保存（Windows safeStorage / macOS Keychain），只显示不泄漏
-- 切换官方 DeepSeek 热生效无需重启；切换千问会进入明确等待页并安全重启本地内核
-- 内核升级：`@deepseek-ai/dsh` 0.1.0-rc.6 → 0.1.1-rc.2，支持最新图片模型与图片附件/Files API 管线
+- **修复: Windows 1.7.0 安装包无法使用** — 打包脚本误删了两个运行时必需包(`@standard-schema/spec`、`yaml/dist/doc`), 导致安装后本地服务启动即崩溃。新安装包已修复, 且 CI 打包后会逐文件自检关键运行时, 缺失即构建失败, 此类问题不会再流出。
+- **新快捷键(双平台)**: 新建会话 `⌘/Ctrl + K` · 复制当前对话为 Markdown `⌘/Ctrl + Shift + C` · 切换主题 `⌘/Ctrl + T` · 模型服务设置 `⌘/Ctrl + ,` · Token 统计 `⌘/Ctrl + Shift + S`。首次启动会显示一张可关闭的快捷键提示卡。
+- **复制对话为 Markdown**: 一键把当前会话导出为 Markdown(用户/助手分块、工具调用、思考过程、上下文注入、代码块), 直接进系统剪贴板。
+- **Windows 托盘快捷操作**: 新增「新建会话」「复制当前对话为 Markdown」, 无需打开窗口即可用。
+- **macOS 顶栏**: 改为全透明悬浮(不再有灰/桃色横带), 吉祥物图标常驻顶栏; 侧栏品牌按钮吉祥物在自定义主题下显示立体卡通样式。
 
-## 保留能力
+## 新增
 
-- 点击即开：自动启动本地服务，无需终端命令
-- 可拖动、可点击的桌面宠物与任务完成提醒
-- 自动从 GitHub 检查更新：Windows 增量更新，macOS 下载新 DMG
-- 分阶段启动反馈与诊断日志
+- **多主题**: 官方样式 / 正太主题 / 暗夜极光 / 奶油纸感 / 深海鲸语, 顶部胶囊或菜单栏一键切换, 已针对各主题调试对比度保证可读性。
+- **主题工坊**: 自定义颜色、壁纸、吉祥物形象与欢迎文案, 保存为个人主题; 主题存于用户目录, **应用更新不丢失**。macOS 与 Windows 双端可用, 自定义吉祥物同步到桌面宠物与托盘/ Dock 图标。
+- **Token 使用统计**: 累计/峰值 Token、最长聊天时长、当前/最长连续天数、每日/每周/累计 Token 活动热图、近 7 日 / 近 30 日明细、每日 Token 趋势图、模型用量。缓存优先秒开 + 后台增量扫描。
+- **本地千问端点** 更新为 `https://www.ssnh.top/v1`, **支持图片输入**; 模型设置向导提供 ssnh.top 注册登录入口。
 
-## 下载
+## 体验
 
-- `DeepSeek-M2-1.6.0.dmg`：macOS 13.5+，Apple Silicon（M1/M2/M3/M4）
-- `DeepSeek-Cute-Windows-x64-Setup-1.6.0.exe`：Windows 10/11 x64 NSIS 安装版
-- `latest.yml` 与 `.blockmap`：Windows 自动更新元数据
-- 同名 `.sha256`：完整性校验
+- **Windows 顶栏重做**: 52px 无边框顶栏, 可拖动、服务状态胶囊(启动中/在线/离线)、主题下拉、模型胶囊(大写显示)、最小化/最大化/关闭。
+- **macOS 顶栏可像普通应用一样拖动**移动窗口; 顶部移除多余的 deepseek 相关元素。
+- Windows 安装包瘦身约 70MB, 安装更快; 运行卡顿修复(服务状态无变化不再推送渲染进程)。
 
-## 验证
+## 稳定性
 
-Windows 1.6.0 已完成 electron-builder x64 构建、asar 打包清单核对（主题、模型设置向导、等待页、内置运行时与 Provider 助手齐全）、NSIS 元数据与 blockmap 校验。macOS 1.6.0 已在 M2 本机完成 Swift 编译、ad-hoc 签名、DMG 挂载验证。
+- 本地服务启动不再自动打开系统浏览器(`--no-open`), 应用内随时可在浏览器中打开。
+- 后端异常自动退避重启(1.5s→30s), 残留端口自动清理, Node 堆内存上限 1024MB, 解决闪退重启问题。
+- 主题工坊跨平台桥协议修复(replyId 回复通道), 保存自定义主题不再超时失败。
 
-## 签名说明
+## 资产
 
-发布包是社区构建。Windows 版未使用商业代码签名证书（可能触发 SmartScreen 提示，请先核对 SHA256）；macOS 版采用 ad-hoc 签名且未公证，首次打开请右键选择“打开”。
+| 文件 | 平台 |
+| --- | --- |
+| `DeepSeek-M2-1.7.0.dmg` (+`.sha256`) | macOS (Apple Silicon) |
+| `DeepSeek-Cute-Windows-x64-Setup-1.7.0.exe` (+`.blockmap`/`.sha256`) | Windows 10/11 x64 |
+| `latest.yml` | Windows 自动更新清单 |
+| `Install-Guide-zh-CN.txt` | 安装指引 |
+
+已安装 1.6.0 的用户直接覆盖安装即可, 自定义主题与 API 密钥均保留; 已装过 1.7.0 的 Windows 用户请重新下载安装本资产(含崩溃修复)。校验: `shasum -a 256 -c <file>.sha256` (macOS) 或 `certutil -hashfile <file> SHA256` (Windows)。
