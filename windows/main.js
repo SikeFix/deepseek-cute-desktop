@@ -1,6 +1,7 @@
 const {
   app,
   BrowserWindow,
+  clipboard,
   dialog,
   ipcMain,
   Menu,
@@ -516,6 +517,44 @@ async function applyThemeMode(mode, persist = true) {
   refreshTrayMenu();
 }
 
+// ---------- 快捷操作(键盘快捷键 / 托盘菜单共用) ----------
+
+function runInPage(code) {
+  if (!mainWindow || mainWindow.isDestroyed()) return Promise.resolve(undefined);
+  return mainWindow.webContents.executeJavaScript(code).catch(() => undefined);
+}
+
+function pageToast(message) {
+  runInPage(`window.__dsmToast&&window.__dsmToast(${JSON.stringify(message)});`);
+}
+
+async function copyConversationMarkdown() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  try {
+    const md = await mainWindow.webContents.executeJavaScript(
+      "window.__dsmConversationMarkdown ? window.__dsmConversationMarkdown() : ''");
+    if (typeof md !== 'string' || !md) {
+      pageToast('当前没有可复制的会话');
+      return;
+    }
+    clipboard.writeText(md);
+    pageToast('对话已复制为 Markdown');
+  } catch (error) {
+    log.warn('[export] copy conversation failed', error);
+  }
+}
+
+function cycleThemeMode() {
+  const list = themeList();
+  if (!list.length) return;
+  const index = Math.max(0, list.findIndex((t) => t.id === themeMode));
+  applyThemeMode(list[(index + 1) % list.length].id);
+}
+
+function triggerNewSession() {
+  runInPage("window.__dsmNewSession&&window.__dsmNewSession();");
+}
+
 // 把激活主题的自定义吉祥物同步给桌面宠物与托盘图标(与 macOS 行为一致)
 function syncMascotAssets(mascot) {
   if (petWindow && !petWindow.isDestroyed()) {
@@ -546,6 +585,9 @@ async function injectTheme() {
   await applyThemeMode(themeMode, false);
   mainWindow.webContents.executeJavaScript(interactions).catch(() => {});
   mainWindow.webContents.executeJavaScript(windowsChrome).catch(() => {});
+  // 会话导出层: 复制对话 Markdown / 新建会话 / 首次快捷键提示
+  const exportJS = fs.readFileSync(path.join(__dirname, 'conversation-export.js'), 'utf8');
+  mainWindow.webContents.executeJavaScript(exportJS).catch(() => {});
 }
 
 function createMainWindow() {
@@ -585,6 +627,30 @@ function createMainWindow() {
         shell.openExternal(url);
       }
     } catch (_) {}
+  });
+  // 应用内键盘快捷键: Ctrl+K 新建会话 / Ctrl+Shift+C 复制对话 / Ctrl+T 切主题
+  // / Ctrl+, 模型设置 / Ctrl+Shift+S Token 统计。用 before-input-event 在
+  // 页面处理前拦截, 不抢占系统全局焦点(与 macOS 菜单快捷键行为一致)。
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (!input || input.type !== 'keyDown' || !input.control) return;
+    const key = String(input.key || '').toLowerCase();
+    const shift = Boolean(input.shift);
+    if (key === 'k' && !shift) {
+      event.preventDefault();
+      triggerNewSession();
+    } else if (key === 'c' && shift) {
+      event.preventDefault();
+      copyConversationMarkdown();
+    } else if (key === 't' && !shift) {
+      event.preventDefault();
+      cycleThemeMode();
+    } else if (key === ',') {
+      event.preventDefault();
+      showModelProviderWizard();
+    } else if (key === 's' && shift) {
+      event.preventDefault();
+      showStatsWindow();
+    }
   });
   mainWindow.on('close', (event) => {
     if (!quitting) {
@@ -950,6 +1016,8 @@ function refreshTrayMenu() {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: '打开 DeepSeek', click: () => showMain() },
     { label: '在浏览器中打开', click: () => shell.openExternal(APP_URL) },
+    { label: '新建会话 (Ctrl+K)', click: () => { showMain(); triggerNewSession(); } },
+    { label: '复制当前对话为 Markdown (Ctrl+Shift+C)', click: () => copyConversationMarkdown() },
     { label: '显示/隐藏桌面宠物', click: () => petWindow?.isVisible() ? petWindow.hide() : petWindow.showInactive() },
     { label: '重试本地服务', click: () => startBackend() },
     {

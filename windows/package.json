@@ -38,6 +38,7 @@
       "model-setup.html",
       "pet-preload.js",
       "window-inject.js",
+      "conversation-export.js",
       "theme-studio.html",
       "stats.html",
       "waiting.html",

@@ -78,7 +78,8 @@ jobs:
           fi
           exe="$(ls dist/*.exe | head -1)"
           name="$(basename "$exe")"
-          shasum -a 256 "$exe" > "$name.sha256"
+          # Git Bash 没有 shasum, 用 sha256sum(输出格式同为 "hash  文件名")
+          sha256sum "$exe" > "$name.sha256"
           gh release upload "$tag" "$exe" "dist/latest.yml" "dist/$name.blockmap" "$name.sha256" --clobber
           echo "Release $tag 资产已更新"
 

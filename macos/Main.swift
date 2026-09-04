@@ -460,6 +460,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
            let interactions = try? String(contentsOf: interactionsURL, encoding: .utf8) {
             controller.addUserScript(WKUserScript(source: interactions, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
         }
+        // 会话导出层: 复制对话 Markdown / 新建会话 / 首次快捷键提示。
+        if let exportURL = Bundle.main.url(forResource: "conversation-export", withExtension: "js"),
+           let exportJS = try? String(contentsOf: exportURL, encoding: .utf8) {
+            controller.addUserScript(WKUserScript(source: exportJS, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        }
         controller.add(self, name: "dsmService")
         controller.add(self, name: "dsmPet")
         config.userContentController = controller
@@ -1951,6 +1956,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let restart = NSMenuItem(title: "重启本地服务", action: #selector(restartBackendFromMenu), keyEquivalent: "")
         restart.target = self
         menu.addItem(restart)
+        let copyConversation = NSMenuItem(title: "复制当前对话（Markdown）", action: #selector(copyConversationMarkdown), keyEquivalent: "")
+        copyConversation.target = self
+        menu.addItem(copyConversation)
 
         let theme = NSMenuItem(title: "界面主题", action: nil, keyEquivalent: "")
         theme.submenu = makeThemeMenu()
@@ -2084,6 +2092,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         appMenu.addItem(withTitle: "隐藏 " + APP_NAME, action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         appMenu.addItem(withTitle: "显示/隐藏桌面宠物", action: #selector(AppDelegate.toggleDesktopPet), keyEquivalent: "p")
         appMenu.addItem(withTitle: "测试任务完成提醒", action: #selector(AppDelegate.testPetCompletion), keyEquivalent: "")
+        appMenu.addItem(.separator())
+        // 快捷操作: 新建会话 ⌘K / 复制对话 ⇧⌘C / 切换主题 ⌘T / 统计 ⇧⌘T(已有)
+        let newSessionItem = appMenu.addItem(withTitle: "新建会话", action: #selector(AppDelegate.newSessionShortcut), keyEquivalent: "k")
+        newSessionItem.target = self
+        let copyConversationItem = appMenu.addItem(withTitle: "复制当前对话（Markdown）", action: #selector(AppDelegate.copyConversationMarkdown), keyEquivalent: "c")
+        copyConversationItem.keyEquivalentModifierMask = [.command, .shift]
+        copyConversationItem.target = self
+        let cycleThemeItem = appMenu.addItem(withTitle: "下一个主题", action: #selector(AppDelegate.cycleThemeShortcut), keyEquivalent: "t")
+        cycleThemeItem.target = self
         let themeItem = NSMenuItem(title: "界面主题", action: nil, keyEquivalent: "")
         themeItem.submenu = makeThemeMenu()
         appMenu.addItem(themeItem)
@@ -2091,7 +2108,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let statsItem = appMenu.addItem(withTitle: "Token 使用统计…", action: #selector(AppDelegate.openStatsWindow), keyEquivalent: "t")
         statsItem.keyEquivalentModifierMask = [.command, .shift]
         statsItem.target = self
-        let providerItem = appMenu.addItem(withTitle: "模型服务设置…", action: #selector(AppDelegate.showModelProviderWizard), keyEquivalent: "")
+        // ⌘, 是 macOS 上"偏好设置"的惯例快捷键
+        let providerItem = appMenu.addItem(withTitle: "模型服务设置…", action: #selector(AppDelegate.showModelProviderWizard), keyEquivalent: ",")
         providerItem.target = self
         appMenu.addItem(.separator())
         let updateItem = appMenu.addItem(withTitle: "检查 GitHub 更新", action: #selector(AppDelegate.checkForUpdatesFromMenu), keyEquivalent: "")
@@ -2138,6 +2156,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     @objc func reloadPage() {
         startBackendIfNeeded()
         loadApp()
+    }
+
+    // MARK: - 快捷操作(菜单项/键盘快捷键共用)
+
+    @objc func newSessionShortcut() {
+        webView?.evaluateJavaScript("window.__dsmNewSession&&window.__dsmNewSession();'ok'", completionHandler: nil)
+    }
+
+    func webToast(_ message: String) {
+        guard let data = try? JSONSerialization.data(withJSONObject: [message]),
+              let json = String(data: data, encoding: .utf8) else { return }
+        webView?.evaluateJavaScript("window.__dsmToast&&window.__dsmToast(\(json));'ok'", completionHandler: nil)
+    }
+
+    @objc func copyConversationMarkdown() {
+        guard let web = webView else { return }
+        web.evaluateJavaScript("window.__dsmConversationMarkdown ? window.__dsmConversationMarkdown() : ''") { [weak self] result, _ in
+            guard let md = result as? String, !md.isEmpty else {
+                self?.webToast("当前没有可复制的会话")
+                return
+            }
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(md, forType: .string)
+            self?.webToast("对话已复制为 Markdown")
+        }
+    }
+
+    @objc func cycleThemeShortcut() {
+        let themes = AppDelegate.builtinThemes
+        guard !themes.isEmpty else { return }
+        var index = themes.firstIndex { $0.id == interfaceTheme } ?? -1
+        index = (index + 1) % themes.count
+        applyInterfaceTheme(themes[index].id)
     }
 }
 
