@@ -27,6 +27,9 @@
     .status { display:inline-flex; align-items:center; gap:9px; margin-top:20px; padding:10px 16px; border-radius:999px; background:rgba(0,0,0,.24); }
     .dot { width:10px; height:10px; border-radius:50%; background:#55d8c2; box-shadow:0 0 18px #55d8c2; animation:pulse 1s ease-in-out infinite alternate; }
     .retry { display:block; margin:22px auto 0; padding:12px 24px; border:2px solid #2b2020; border-radius:14px; color:white; background:#fb684f; font-weight:800; font-size:15px; box-shadow:6px 7px 0 #f5dc26; cursor:pointer; }
+    .error { display:none; margin:16px auto 0; max-width:540px; padding:10px 14px; border-radius:12px; background:rgba(251,104,79,.14); color:#ffb4a8; font-size:13px; text-align:left; word-break:break-all; white-space:pre-wrap; font-family:Consolas,monospace; }
+    .diag { display:block; margin:12px auto 0; padding:10px 20px; border:1.5px solid rgba(85,216,194,.5); border-radius:12px; color:#55d8c2; background:rgba(85,216,194,.1); font-size:14px; font-weight:700; cursor:pointer; }
+    .diag:hover { background:rgba(85,216,194,.22); }
     .update { margin:18px auto 0; max-width:430px; padding:12px 14px; border-radius:16px; background:rgba(255,241,220,.07); color:#ead6b8; font-size:13px; }
     .update-line { display:flex; align-items:center; justify-content:center; gap:10px; }
     .check { border:0; padding:5px 9px; border-radius:9px; color:#55d8c2; background:rgba(85,216,194,.12); cursor:pointer; font-weight:700; }
@@ -47,7 +50,9 @@
       <div class="update-line"><span id="update-text">启动后将自动检查 GitHub 更新</span><button class="check" id="check-update">检查更新</button></div>
       <div class="progress" id="update-progress"><span></span></div>
     </div>
+    <p class="error" id="error"></p>
     <button class="retry" id="retry">立即重试</button>
+    <button class="diag" id="diag">复制诊断信息（发给开发者快速定位）</button>
   </main>
   <script>
     const message = new URLSearchParams(location.search).get('message');
@@ -61,6 +66,18 @@
     retry.addEventListener('click', () => {
       serviceText.textContent = '已收到重试请求，正在重新启动…';
       window.webkit?.messageHandlers?.dsmService?.postMessage('recover');
+    });
+    const errorEl = document.querySelector('#error');
+    const errorParam = new URLSearchParams(location.search).get('error');
+    if (errorParam) { errorEl.textContent = errorParam; errorEl.style.display = 'block'; }
+    const diag = document.querySelector('#diag');
+    diag.addEventListener('click', () => {
+      diag.textContent = '正在复制…';
+      const done = (ok) => {
+        diag.textContent = ok ? '已复制，请把剪贴板内容发给开发者' : '复制失败，请点右上角托盘菜单再试';
+        setTimeout(() => { diag.textContent = '复制诊断信息（发给开发者快速定位）'; }, 6000);
+      };
+      Promise.resolve(window.deepseekDesktop?.copyDiagnostics?.()).then((file) => done(!!file)).catch(() => done(false));
     });
     document.querySelector('#check-update').addEventListener('click', () => window.deepseekDesktop?.checkForUpdates());
     const renderServiceStatus = (status) => {

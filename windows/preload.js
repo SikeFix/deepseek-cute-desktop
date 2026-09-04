@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('deepseekDesktop', {
   openStats: () => ipcRenderer.send('dsm-stats-open'),
   openInviteLogin: () => ipcRenderer.send('dsm-open-website'),
   getStatus: () => ipcRenderer.invoke('dsm-status'),
+  copyDiagnostics: () => ipcRenderer.invoke('dsm-diagnostics-copy'),
   onServiceStatus: (callback) => ipcRenderer.on('service-status', (_event, status) => callback(status)),
   onUpdateStatus: (callback) => ipcRenderer.on('update-status', (_event, status) => callback(status))
 });

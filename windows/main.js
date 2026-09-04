@@ -17,6 +17,7 @@ const { autoUpdater } = require('electron-updater');
 const { spawn, spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const http = require('node:http');
+const os = require('node:os');
 const path = require('node:path');
 
 const APP_URL = 'http://127.0.0.1:3080';
@@ -32,6 +33,8 @@ let backendProcess;
 let backendStarting = false;
 let backendLogStream;
 let backendRestartAttempts = 0;
+let lastBackendExit = '';
+let lastBackendError = '';
 let healthTimer;
 let updateTimer;
 let healthFailures = 0;
@@ -61,6 +64,7 @@ const resourcePath = (...parts) => path.join(app.isPackaged ? process.resourcesP
 const petPositionPath = () => path.join(app.getPath('userData'), 'pet-position.json');
 const preferencesPath = () => path.join(app.getPath('userData'), 'preferences.json');
 const providerSecretPath = () => path.join(app.getPath('userData'), 'provider-secret.json');
+const backendLogPath = () => path.join(app.getPath('userData'), 'backend.log');
 
 function readJSON(filePath, fallback = {}) {
   try { return JSON.parse(fs.readFileSync(filePath, 'utf8')); } catch (_) { return fallback; }
@@ -383,6 +387,75 @@ function setupAutoUpdater() {
   updateTimer = setInterval(() => checkForUpdates(false), 6 * 60 * 60 * 1000);
 }
 
+// ---------- 诊断信息(复制/保存, 供开发者定位问题) ----------
+
+function tailLines(filePath, maxLines, maxChars = 60000) {
+  try {
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter((line) => line !== '');
+    let text = lines.slice(-maxLines).join('\n');
+    if (text.length > maxChars) text = text.slice(-maxChars);
+    return text || '(空)';
+  } catch (_) {
+    return '(无法读取)';
+  }
+}
+
+// 脱敏: 诊断内容绝不包含任何 API 密钥(即使内核把 env 打到日志里)
+function sanitizeDiagnostics(text) {
+  return text
+    .split('\n')
+    .filter((line) => !/sk-[A-Za-z0-9_-]{8,}/.test(line) && !/api[_-]?key\s*[=:]\s*\S/i.test(line))
+    .join('\n');
+}
+
+function lastBackendErrorLine() {
+  try {
+    const raw = fs.readFileSync(backendLogPath(), 'utf8');
+    const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter((line) => line !== '');
+    for (let i = lines.length - 1; i >= Math.max(0, lines.length - 40); i--) {
+      if (/exit code=/.test(lines[i])) continue;
+      if (/error|E[A-Z]{2,4}S?|MODULE_NOT_FOUND|Uncaught|Unhandled/i.test(lines[i])) return lines[i].slice(0, 300);
+    }
+    return (lines[lines.length - 1] || '').slice(0, 300);
+  } catch (_) {
+    return '';
+  }
+}
+
+function buildDiagnostics() {
+  const header = [
+    'DeepSeek Cute 诊断信息',
+    '==================',
+    `平台: ${process.platform} ${process.arch}`,
+    `系统: ${os.type()} ${os.release()} (node ${process.versions.node})`,
+    `应用版本: ${app.getVersion()}`,
+    `服务状态: ${serviceStatus.state} - ${serviceStatus.message}`,
+    `后端: ${backendProcess && !backendProcess.killed ? '运行中' : '已停止'}${lastBackendExit ? `，最近退出 ${lastBackendExit}` : ''}`,
+    `用户数据目录: ${app.getPath('userData')}`
+  ].join('\n');
+  const backendSection = `\n\n---- backend.log(最近 300 行, 内核真实报错在这里) ----\n${tailLines(backendLogPath(), 300)}`;
+  let mainSection = '';
+  try { mainSection = `\n\n---- main.log(最近 150 行) ----\n${tailLines(log.transports.file.getFile().path, 150)}`; } catch (_) {}
+  return sanitizeDiagnostics(header + backendSection + mainSection);
+}
+
+function copyDiagnostics() {
+  try {
+    const text = buildDiagnostics();
+    clipboard.writeText(text);
+    // 同时落一份到用户数据目录, 方便直接发文件
+    const stamp = new Date().toISOString().replace(/[-:TZ]/g, '').slice(0, 12);
+    const file = path.join(app.getPath('userData'), `diagnostics-${stamp}.txt`);
+    fs.writeFileSync(file, text, { mode: 0o600 });
+    log.info(`[diagnostics] copied to clipboard, saved ${file}`);
+    return file;
+  } catch (error) {
+    log.error('[diagnostics] failed', error);
+    return '';
+  }
+}
+
 async function startBackend() {
   if ((backendProcess && !backendProcess.killed) || backendStarting) return;
   backendStarting = true;
@@ -405,8 +478,7 @@ async function startBackend() {
 
   publishServiceStatus('starting', '组件已就绪，正在启动本地服务…');
   killStalePortListeners();
-  const backendLogPath = path.join(app.getPath('userData'), 'backend.log');
-  backendLogStream = fs.createWriteStream(backendLogPath, { flags: 'a' });
+  backendLogStream = fs.createWriteStream(backendLogPath(), { flags: 'a' });
   // --max-old-space-size: 限制后端 V8 堆, 防止长会话内存无上限增长触发
   // 长 GC 停顿(表现为界面一卡一卡); --no-open: 内核启动/自动重启时
   // 不再弹出系统浏览器窗口。
@@ -447,6 +519,9 @@ async function startBackend() {
   });
   backendProcess.once('exit', (code, signal) => {
     log.warn(`[backend] exit code=${code} signal=${signal} restartAttempt=${backendRestartAttempts}`);
+    lastBackendExit = `code=${code} signal=${signal}`;
+    // 退出前先抓最后一段报错, 供等待页与诊断信息展示
+    lastBackendError = code === 0 ? '' : lastBackendErrorLine();
     backendLogStream?.end(`\n[${new Date().toISOString()}] exit code=${code} signal=${signal}\n`);
     backendLogStream = undefined;
     backendProcess = undefined;
@@ -479,7 +554,8 @@ async function checkHealth(recover = true) {
 
 function showWaiting(message = '正在等待本地 DeepSeek 服务启动…') {
   if (!mainWindow || mainWindow.isDestroyed()) return;
-  mainWindow.loadFile(path.join(__dirname, 'waiting.html'), { query: { message } }).catch(() => {});
+  const error = lastBackendError ? `内核最后报错：${lastBackendError}` : '';
+  mainWindow.loadFile(path.join(__dirname, 'waiting.html'), { query: { message, error } }).catch(() => {});
 }
 
 function loadMainURL(url = APP_URL) {
@@ -1032,6 +1108,7 @@ function refreshTrayMenu() {
     { label: '模型服务设置…', click: () => showModelProviderWizard() },
     { label: '邀请登录 ssnh.top', click: () => shell.openExternal(WEBSITE_URL) },
     { label: '检查应用更新', click: () => checkForUpdates(true) },
+    { label: '复制诊断信息（含内核报错）', click: () => copyDiagnostics() },
     { label: '打开诊断日志', click: () => shell.showItemInFolder(log.transports.file.getFile().path) },
     { type: 'separator' },
     { label: '退出', click: () => { quitting = true; app.quit(); } }
@@ -1060,6 +1137,7 @@ ipcMain.on('dsm-service', (_event, command) => {
 
 ipcMain.on('dsm-update', () => checkForUpdates(true));
 ipcMain.handle('dsm-status', () => ({ service: serviceStatus, update: updateStatus }));
+ipcMain.handle('dsm-diagnostics-copy', () => copyDiagnostics());
 ipcMain.handle('dsm-theme-get', () => themeMode);
 ipcMain.handle('dsm-theme-list', () => themeList());
 ipcMain.on('dsm-theme-set', (event, mode) => {

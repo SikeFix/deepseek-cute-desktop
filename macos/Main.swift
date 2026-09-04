@@ -391,6 +391,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     var focusTitle = "专注时间"
     var backendStartedAt: Date?
     var backendLogHandle: FileHandle?
+    var lastBackendExit = ""
     var consecutiveHealthFailures = 0
     var isTerminating = false
     var statusItem: NSStatusItem?
@@ -1457,6 +1458,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 self.backendLogHandle = nil
                 guard !self.isTerminating else { return }
                 self.writeAppLog("backend exited status=\(finished.terminationStatus)")
+                self.lastBackendExit = "status=\(finished.terminationStatus)"
                 self.scheduleBackendRestart()
             }
         }
@@ -2025,16 +2027,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         NSWorkspace.shared.open(logsDirectory())
     }
 
+    /// 取日志文件最后 maxLines 行(去空行), 超长截尾, 用于诊断信息
+    func tailLines(_ url: URL, _ maxLines: Int, maxChars: Int = 60000) -> String? {
+        guard let raw = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+        let lines = raw.split(separator: "\n", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        var text = lines.suffix(maxLines).joined(separator: "\n")
+        if text.utf8.count > maxChars { text = String(text.suffix(maxChars)) }
+        return text.isEmpty ? "(空)" : text
+    }
+
+    /// 诊断内容脱敏: 任何带 API 密钥的行都不允许出现在剪贴板/导出文件里
+    func sanitizedDiagnostics(_ text: String) -> String {
+        text.split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { line in
+                if line.range(of: #"sk-[A-Za-z0-9_-]{8,}"#, options: .regularExpression) != nil { return false }
+                if line.range(of: #"api[_-]?key\s*[=:]\s*\S"#, options: [.regularExpression, .caseInsensitive]) != nil { return false }
+                return true
+            }
+            .joined(separator: "\n")
+    }
+
     @objc func copyDiagnostics() {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
-        let details = """
+        var details = """
         DeepSeek Cute \(version) (\(build))
         macOS \(ProcessInfo.processInfo.operatingSystemVersionString)
         Service: \(lastServiceStatus)
-        Runtime: \(backendProcess?.isRunning == true ? "running" : "stopped")
+        Runtime: \(backendProcess?.isRunning == true ? "running" : "stopped")\(lastBackendExit.isEmpty ? "" : "，最近退出 \(lastBackendExit)")
         Logs: \(logsDirectory().path)
         """
+        if let tail = tailLines(logFile(named: "app.log"), 150) {
+            details += "\n\n---- app.log(最近 150 行) ----\n" + tail
+        }
+        if let tail = tailLines(logFile(named: "backend.log"), 300) {
+            details += "\n\n---- backend.log(最近 300 行, 内核真实报错在这里) ----\n" + tail
+        }
+        details = sanitizedDiagnostics(details)
+        // 同时落一份 txt 到日志目录, 方便直接发文件
+        let stamp = ISO8601DateFormatter().string(from: Date())
+            .replacingOccurrences(of: "-", with: "").replacingOccurrences(of: ":", with: "")
+            .replacingOccurrences(of: "T", with: "").replacingOccurrences(of: "Z", with: "")
+        let outFile = logsDirectory().appendingPathComponent("diagnostics-\(stamp).txt")
+        try? details.write(to: outFile, atomically: true, encoding: .utf8)
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(details, forType: .string)
         if !taskBusy {
