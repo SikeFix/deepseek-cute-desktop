@@ -46,11 +46,22 @@ $HarnessPackages = @(
     "@deepseek-ai/dsh-timeout@0.1.1-rc.2",
     "@deepseek-ai/dsh-workflow@0.1.1-rc.2"
 )
-# --os=win32 --cpu=x64: 只安装 Windows x64 平台的原生预编译依赖
-# (sharp/@img、esbuild 等 optionalDependencies), 避免拉下 darwin/linux/arm64
-# 的全部平台包 —— 这是运行时目录体积的最大单一来源。
-npm install --omit=dev --ignore-scripts --legacy-peer-deps --os=win32 --cpu=x64 $HarnessPackages
+# 注意: 不要加 --os/--cpu 过滤参数 —— 部分 npm 版本会把带平台过滤的
+# 根包规格静默跳过, 导致 dsh 缺失。非 Windows 平台包(darwin/linux 的
+# sharp/@img/esbuild 预编译)由 after-pack.js 在打包阶段剔除。
+npm install --omit=dev --ignore-scripts --legacy-peer-deps $HarnessPackages
 Pop-Location
-Copy-Item (Join-Path $RuntimeDir "node_modules/@deepseek-ai/dsh/LICENSE") (Join-Path $RuntimeDir "licenses/DSH-LICENSE.txt") -Force
+
+# 安装完整性校验: 缺关键文件立即失败, 避免打出缺运行时的包
+$dshBin = Join-Path $RuntimeDir "node_modules/@deepseek-ai/dsh/lib/bin.js"
+$dshLicense = Join-Path $RuntimeDir "node_modules/@deepseek-ai/dsh/LICENSE"
+foreach ($f in @($dshBin, $dshLicense)) {
+    if (-not (Test-Path $f)) { throw "npm install 缺少关键文件: $f" }
+}
+$pkgCount = (Get-ChildItem (Join-Path $RuntimeDir "node_modules/@deepseek-ai") -Directory).Count
+Write-Host "Harness packages under @deepseek-ai: $pkgCount"
+if ($pkgCount -lt 150) { throw "运行时包数量异常($pkgCount < 150), 疑似安装不完整" }
+
+Copy-Item $dshLicense (Join-Path $RuntimeDir "licenses/DSH-LICENSE.txt") -Force
 
 Write-Host "Runtime prepared. Run: npm ci; npm run build:win"
