@@ -109,6 +109,6 @@ exports.default = async function afterPack(context) {
   pruneTree(modules);
 
   const mb = (n) => `${(n / 1024 / 1024).toFixed(1)}MB`;
-  const console = context.log || console;
-  console.info(`[after-pack] pruned ${mb(removedBytes)} from dsh node_modules`);
+  const log = context.log || globalThis.console;
+  log.info(`[after-pack] pruned ${mb(removedBytes)} from dsh node_modules`);
 };
