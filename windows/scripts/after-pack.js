@@ -93,7 +93,7 @@ function prunePlatformPackages(modules) {
   if (fs.existsSync(imgDir)) {
     for (const entry of fs.readdirSync(imgDir, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
-      if (entry.name === 'sharp-win32-x64' || entry.name === 'sharp-libvips-win32-x64' || entry.name.includes('wasm')) continue;
+      if (entry.name === 'colour' || entry.name === 'sharp-win32-x64' || entry.name === 'sharp-libvips-win32-x64' || entry.name.includes('wasm')) continue;
       removedBytes += dirSize(path.join(imgDir, entry.name));
       removeIfPresent(path.join(imgDir, entry.name));
     }

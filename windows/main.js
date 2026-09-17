@@ -323,15 +323,25 @@ function setupAutoUpdater() {
   if (!app.isPackaged || process.platform !== 'win32') return;
 
   autoUpdater.logger = log;
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
   autoUpdater.allowPrerelease = false;
 
   autoUpdater.on('checking-for-update', () => {
     publishUpdateStatus('checking', '正在连接 GitHub 检查更新…', 0);
   });
-  autoUpdater.on('update-available', (info) => {
-    publishUpdateStatus('available', `发现 ${info.version}，正在后台下载…`, 0);
+  autoUpdater.on('update-available', async (info) => {
+    publishUpdateStatus('available', `发现 ${info.version}，等待你的确认`, 0);
+    if (!manualUpdateCheck || !mainWindow || mainWindow.isDestroyed()) return;
+    const result = await dialog.showMessageBox(mainWindow, {
+      type: 'info', title: '发现新版本', message: `DeepSeek Cute ${info.version} 已发布`,
+      detail: '是否现在下载？下载和安装都不会在后台强制进行。', buttons: ['下载更新', '稍后'], defaultId: 0, cancelId: 1, noLink: true
+    });
+    if (result.response === 0) {
+      publishUpdateStatus('downloading', '正在下载更新…', 0);
+      autoUpdater.downloadUpdate().catch((error) => log.error('[update] download failed', error));
+    }
+    manualUpdateCheck = false;
   });
   autoUpdater.on('update-not-available', () => {
     publishUpdateStatus('current', `已是最新版 ${app.getVersion()}`, 100);
@@ -383,8 +393,8 @@ function setupAutoUpdater() {
     manualUpdateCheck = false;
   });
 
-  setTimeout(() => checkForUpdates(false), 8000);
-  updateTimer = setInterval(() => checkForUpdates(false), 6 * 60 * 60 * 1000);
+  // 更新仅由用户从界面或托盘菜单主动触发，避免强制下载/安装打断工作。
+  updateTimer = null;
 }
 
 // ---------- 诊断信息(复制/保存, 供开发者定位问题) ----------
