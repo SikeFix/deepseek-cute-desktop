@@ -1,5 +1,7 @@
 # DeepSeek Cute Desktop
 
+[中文](README.md) · [English](README.en.md) · [⭐ Star this project](https://github.com/SikeFix/deepseek-cute-desktop)
+
 下载即用的本地 DeepSeek 桌面端：五套内置主题 + 主题工坊自定义（更新不丢失）、会互动的桌面宠物、任务完成提醒、Token 使用统计、一键复制对话 Markdown、一键导出诊断信息，以及官方 DeepSeek / 本地千问双模型服务。macOS 和 Windows 都不需要用户额外安装 Node.js 或手动运行 `dsh web`，启动时也不会打开系统浏览器。
 
 [下载最新版](https://github.com/SikeFix/deepseek-cute-desktop/releases/latest)
