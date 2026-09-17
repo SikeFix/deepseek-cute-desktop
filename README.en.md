@@ -1,5 +1,7 @@
 # DeepSeek Cute Desktop
 
+> A cute, local-first DeepSeek desktop client with themes, a desktop pet, and user-controlled updates.
+
 [中文](README.md) · [English](README.en.md) · [⭐ Star this project](https://github.com/SikeFix/deepseek-cute-desktop)
 
 A ready-to-use DeepSeek desktop client for macOS and Windows. It includes built-in themes, a customizable theme studio, an interactive desktop pet, task notifications, token usage statistics, Markdown conversation export, diagnostics export, and support for the official DeepSeek service or a local Qwen-compatible provider.
