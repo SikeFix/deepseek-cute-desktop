@@ -67,7 +67,7 @@
 
 - 模型 API 密钥仅保存在 macOS 钥匙串 / Windows DPAPI 加密存储，注入为环境变量供内核使用，不写入 GitHub、DSH 设置文件或应用日志；本地千问端点强制 HTTPS。
 - 模型账号、登录状态和工作区数据仍由每台电脑分别管理，不会打包进安装文件。
-- macOS 1.7.4 已在 M2 环境完成编译、ad-hoc 签名、DMG 挂载与内置 0.1.1-rc.2 运行时验证（从 DMG 镜像直接启动，本地服务 200）。
+- macOS 1.7.4 已在 M2 环境完成编译、ad-hoc 签名、DMG 挂载与内置 0.1.5-rc.2 运行时验证（从 DMG 镜像直接启动，本地服务 200）。
 - Windows 1.7.4 由 GitHub Actions 在 windows-latest 完成 electron-builder x64 构建，打包后逐文件自检关键运行时（缺失即构建失败），并核对 NSIS 更新元数据与差分 blockmap。
 - 项目不是 DeepSeek 官方产品，详情见 [NOTICE.md](NOTICE.md)。
 
