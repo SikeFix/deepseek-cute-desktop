@@ -12,10 +12,10 @@
 
 | 系统 | 下载 | 要求 |
 | --- | --- | --- |
-| macOS Apple Silicon | [DeepSeek-M2-1.7.2.dmg](https://github.com/SikeFix/deepseek-cute-desktop/releases/latest/download/DeepSeek-M2-1.7.2.dmg) | macOS 13.5+，M1/M2/M3/M4 |
-| Windows x64 | [DeepSeek-Cute-Windows-x64-Setup-1.7.2.exe](https://github.com/SikeFix/deepseek-cute-desktop/releases/latest/download/DeepSeek-Cute-Windows-x64-Setup-1.7.2.exe) | Windows 10/11 x64 |
+| macOS Apple Silicon | [DeepSeek-M2-1.7.4.dmg](https://github.com/SikeFix/deepseek-cute-desktop/releases/latest/download/DeepSeek-M2-1.7.4.dmg) | macOS 13.5+，M1/M2/M3/M4 |
+| Windows x64 | [DeepSeek-Cute-Windows-x64-Setup-1.7.4.exe](https://github.com/SikeFix/deepseek-cute-desktop/releases/latest/download/DeepSeek-Cute-Windows-x64-Setup-1.7.4.exe) | Windows 10/11 x64 |
 
-## 1.7.2 新功能
+## 1.7.4 新功能
 
 - **一键导出诊断信息**：服务异常时，等待页直接显示内核最后报错，并新增「复制诊断信息」按钮（托盘/菜单也有同名入口）；自动汇总应用版本、系统信息、`backend.log`（内核真实报错）与主日志尾部，复制到剪贴板并保存一份 `diagnostics-*.txt` 到日志目录，发给开发者即可定位问题。内容已脱敏，不含任何 API 密钥
 - **键盘快捷键（双平台）**：新建会话 `⌘/Ctrl + K` · 复制当前对话为 Markdown `⌘/Ctrl + Shift + C` · 下一个主题 `⌘/Ctrl + T` · 模型服务设置 `⌘/Ctrl + ,` · Token 统计 Windows `Ctrl + Shift + S` / macOS `⌘ + Shift + T`；首次启动显示可关闭的快捷键提示卡
@@ -59,16 +59,16 @@
 ## 校验值
 
 ```text
-767f7f7585b945194fb60b554ccaff92b00c16ae722ad09cbd3e054027197c2a  DeepSeek-M2-1.7.2.dmg
-27d8cc88f8e5a8cb4344067b14418585d8ae4e9abbd1b5af3a0891af9c97b047  DeepSeek-Cute-Windows-x64-Setup-1.7.2.exe
+767f7f7585b945194fb60b554ccaff92b00c16ae722ad09cbd3e054027197c2a  DeepSeek-M2-1.7.4.dmg
+27d8cc88f8e5a8cb4344067b14418585d8ae4e9abbd1b5af3a0891af9c97b047  DeepSeek-Cute-Windows-x64-Setup-1.7.4.exe
 ```
 
 ## 说明
 
 - 模型 API 密钥仅保存在 macOS 钥匙串 / Windows DPAPI 加密存储，注入为环境变量供内核使用，不写入 GitHub、DSH 设置文件或应用日志；本地千问端点强制 HTTPS。
 - 模型账号、登录状态和工作区数据仍由每台电脑分别管理，不会打包进安装文件。
-- macOS 1.7.2 已在 M2 环境完成编译、ad-hoc 签名、DMG 挂载与内置 0.1.1-rc.2 运行时验证（从 DMG 镜像直接启动，本地服务 200）。
-- Windows 1.7.2 由 GitHub Actions 在 windows-latest 完成 electron-builder x64 构建，打包后逐文件自检关键运行时（缺失即构建失败），并核对 NSIS 更新元数据与差分 blockmap。
+- macOS 1.7.4 已在 M2 环境完成编译、ad-hoc 签名、DMG 挂载与内置 0.1.1-rc.2 运行时验证（从 DMG 镜像直接启动，本地服务 200）。
+- Windows 1.7.4 由 GitHub Actions 在 windows-latest 完成 electron-builder x64 构建，打包后逐文件自检关键运行时（缺失即构建失败），并核对 NSIS 更新元数据与差分 blockmap。
 - 项目不是 DeepSeek 官方产品，详情见 [NOTICE.md](NOTICE.md)。
 
 ## 源码

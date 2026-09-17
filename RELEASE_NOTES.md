@@ -1,3 +1,13 @@
+# DeepSeek Cute Desktop 1.7.4
+
+## 本次更新
+
+- 修复 Windows 安装包遗漏 `@img/colour` 导致本地服务启动失败的问题。
+- Windows 与 macOS 更新改为用户主动检查、确认下载和安装，不再强制后台更新。
+- Windows 版本升至 1.7.4，macOS 版本同步升至 1.7.4。
+
+---
+
 # DeepSeek Cute Desktop 1.7.2
 
 多主题 + 主题工坊 + Token 使用统计 + 双端顶栏重做 + 稳定性/安装体验优化。
