@@ -1186,9 +1186,11 @@ ipcMain.handle('provider-save', (_event, payload = {}) => {
       const url = new URL(endpoint);
       if (url.protocol !== 'https:') throw new Error('接口必须使用 HTTPS');
       if (!model || !apiKey) throw new Error('模型名称和 API 密钥不能为空');
-      saveQwenAPIKey(apiKey);
+      // 相同密钥重复提交时不重复写入凭据或重启后端，避免重复授权/刷新会话。
+      const unchangedKey = qwenAPIKey() === apiKey;
+      if (!unchangedKey) saveQwenAPIKey(apiKey);
       runProviderConfig({ provider: 'qwen', endpoint, model });
-      needsRestart = true;
+      needsRestart = !unchangedKey;
     } else {
       throw new Error('未知的模型服务');
     }
