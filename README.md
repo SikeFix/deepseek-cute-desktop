@@ -6,6 +6,8 @@
 
 [下载最新版](https://github.com/SikeFix/deepseek-cute-desktop/releases/latest)
 
+如果这个项目对你有帮助，欢迎点击右上角 **Star ⭐**，你的支持会帮助我们持续优化功能、修复问题并维护多语言文档。
+
 ![真实界面](docs/images/real-ui.png)
 
 > 上图为真实应用界面截图。下方三图为 AI 生成的场景展示，用来呈现桌面搭配效果。
