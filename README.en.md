@@ -45,8 +45,8 @@ If the local service does not start, copy the diagnostics report from the waitin
 ## Checksums
 
 ```text
-b02fcb19ebf2710af276887a0888558d56c8935dc2f03cf41a82f085695fdf68  DeepSeek-M2-1.8.1.dmg
-95c66e5c12aba5ff7cf7524ebe9dc05795e20c8d33664aa3413c8a4f1d777c6d  DeepSeek-Cute-Windows-x64-Setup-1.8.1.exe
+ac3494fa362327ab2d10b95361c130659eac4a7ed4301f4ebda3d88a1f7f0739  DeepSeek-M2-1.8.1.dmg
+711ac92e2ffab82d10451982a1d13541d817862b4ca7d826752bb0b1a84c7a5b  DeepSeek-Cute-Windows-x64-Setup-1.8.1.exe
 ```
 
 On macOS run `shasum -a 256 -c DeepSeek-M2-1.8.1.dmg.sha256`. On Windows run `certutil -hashfile DeepSeek-Cute-Windows-x64-Setup-1.8.1.exe SHA256`.
