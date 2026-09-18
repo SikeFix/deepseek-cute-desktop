@@ -54,6 +54,7 @@ jobs:
             (Join-Path $nm '@standard-schema\spec\package.json'),
             (Join-Path $nm 'yaml\dist\doc\Document.js'),
             (Join-Path $nm 'yaml\dist\index.js')
+            (Join-Path $nm '@img\colour\package.json')
           )
           foreach ($full in $required) {
             if (-not (Test-Path $full)) {

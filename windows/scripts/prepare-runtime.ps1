@@ -55,6 +55,7 @@ $HarnessPackages = @(
     "@deepseek-ai/dsh-subagent-in-process-driver@0.1.1-rc.2",
     "@deepseek-ai/dsh-timeout@0.1.1-rc.2",
     "@deepseek-ai/dsh-workflow@0.1.1-rc.2"
+    "@img/colour@1.1.0"
 )
 # 注意: 不要加 --os/--cpu 过滤参数 —— 部分 npm 版本会把带平台过滤的
 # 根包规格静默跳过, 导致 dsh 缺失。非 Windows 平台包(darwin/linux 的
