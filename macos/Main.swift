@@ -391,6 +391,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     var focusTitle = "专注时间"
     var backendStartedAt: Date?
     var backendLogHandle: FileHandle?
+    var backendOutputPipe: Pipe?
     var lastBackendExit = ""
     var consecutiveHealthFailures = 0
     var isTerminating = false
@@ -1438,8 +1439,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         process.environment = environment
         process.currentDirectoryURL = fileManager.homeDirectoryForCurrentUser
         if let backendLog = prepareBackendLog() {
-            process.standardOutput = backendLog
-            process.standardError = backendLog
+            // Tee backend output into the log while watching for the first-run
+            // browser authentication URL. dsh prints this URL instead of opening
+            // a browser when launched with --no-open.
+            let output = Pipe()
+            backendOutputPipe = output
+            process.standardOutput = output
+            process.standardError = output
+            output.fileHandleForReading.readabilityHandler = { [weak self] reader in
+                let data = reader.availableData
+                guard !data.isEmpty else { return }
+                try? backendLog.write(contentsOf: data)
+                guard let text = String(data: data, encoding: .utf8) else { return }
+                let pattern = #"https?://[^\s"<>]+"#
+                guard let regex = try? NSRegularExpression(pattern: pattern),
+                      let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+                      let range = Range(match.range, in: text),
+                      let url = URL(string: String(text[range])) else { return }
+                DispatchQueue.main.async {
+                    guard !self!.isTerminating else { return }
+                    self!.writeAppLog("opening dsh authentication URL")
+                    NSWorkspace.shared.open(url)
+                    self!.petView?.setMood(.thinking, text: "请在浏览器完成登录授权", color: .systemYellow)
+                }
+            }
         } else {
             process.standardOutput = FileHandle.nullDevice
             process.standardError = FileHandle.nullDevice
@@ -1450,6 +1473,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 if self.backendProcess?.processIdentifier == finished.processIdentifier {
                     self.backendProcess = nil
                 }
+                self.backendOutputPipe?.fileHandleForReading.readabilityHandler = nil
+                self.backendOutputPipe = nil
                 try? self.backendLogHandle?.close()
                 self.backendLogHandle = nil
                 guard !self.isTerminating else { return }
