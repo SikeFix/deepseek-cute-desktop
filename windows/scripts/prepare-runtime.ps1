@@ -44,7 +44,7 @@ $HarnessPackages = @(
 # 注意: 不要加 --os/--cpu 过滤参数 —— 部分 npm 版本会把带平台过滤的
 # 根包规格静默跳过, 导致 dsh 缺失。非 Windows 平台包(darwin/linux 的
 # sharp/@img/esbuild 预编译)由 after-pack.js 在打包阶段剔除。
-npm install --no-audit --no-fund --omit=dev --ignore-scripts --legacy-peer-deps $HarnessPackages
+npm install --no-audit --no-fund --omit=dev --ignore-scripts $HarnessPackages
 Pop-Location
 
 # 安装完整性校验: 缺关键文件立即失败, 避免打出缺运行时的包
