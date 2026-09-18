@@ -10,3 +10,5 @@ npm run build:win
 ```
 
 脚本会下载官方 Node.js 24.18.1 x64、校验 SHA256，并安装带图片附件/Files API 管线的 `@deepseek-ai/dsh@0.1.5-rc.2`。`npm run build:win` 会生成 NSIS 安装包、`latest.yml` 和差分更新 blockmap，成品位于 `dist/`。
+
+插件市场页面由 `plugin-market.html` 提供，市场引擎和 catalog 校验代码从 `../shared/` 作为只读资源打包；用户插件写入用户数据目录和 DSH profile，不写入安装目录。

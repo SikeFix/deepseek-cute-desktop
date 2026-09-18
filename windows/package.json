@@ -41,6 +41,7 @@
       "conversation-export.js",
       "theme-studio.html",
       "stats.html",
+      "plugin-market.html",
       "waiting.html",
       "pet.html",
       "scripts/after-pack.js",
@@ -75,6 +76,14 @@
       {
         "from": "../provider",
         "to": "provider"
+      },
+      {
+        "from": "../shared/plugin-market-cli.mjs",
+        "to": "shared/plugin-market-cli.mjs"
+      },
+      {
+        "from": "../shared/market-engine",
+        "to": "shared/market-engine"
       }
     ],
     "win": {

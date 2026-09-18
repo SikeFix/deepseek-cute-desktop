@@ -29,6 +29,7 @@ let mainWindow;
 let petWindow;
 let tray;
 let providerWindow;
+let pluginMarketWindow;
 let backendProcess;
 let backendStarting = false;
 let backendLogStream;
@@ -68,6 +69,7 @@ const petPositionPath = () => path.join(app.getPath('userData'), 'pet-position.j
 const preferencesPath = () => path.join(app.getPath('userData'), 'preferences.json');
 const providerSecretPath = () => path.join(app.getPath('userData'), 'provider-secret.json');
 const backendLogPath = () => path.join(app.getPath('userData'), 'backend.log');
+const dshHomePath = () => path.join(os.homedir(), '.dsh');
 
 function readJSON(filePath, fallback = {}) {
   try { return JSON.parse(fs.readFileSync(filePath, 'utf8')); } catch (_) { return fallback; }
@@ -179,6 +181,7 @@ function runProviderConfig({ provider, endpoint, model }) {
   if (model) args.push('--model', model);
   const result = spawnSync(nodeExe, args, {
     cwd: app.getPath('home'),
+    env: { ...process.env, DSH_HOME: dshHomePath() },
     windowsHide: true,
     encoding: 'utf8',
     timeout: 15000
@@ -503,7 +506,10 @@ async function startBackend() {
   // --max-old-space-size: 限制后端 V8 堆, 防止长会话内存无上限增长触发
   // 长 GC 停顿(表现为界面一卡一卡); --no-open: 内核启动/自动重启时
   // 不再弹出系统浏览器窗口。
-  const backendArgs = ['--max-old-space-size=1024', dshBin, 'web', '--no-open'];
+  const profileManifest = path.join(dshHomePath(), 'profiles', 'deepseek-desktop', 'package.json');
+  const backendArgs = fs.existsSync(profileManifest)
+    ? ['--max-old-space-size=1024', dshBin, '--profile', 'deepseek-desktop', '--no-open']
+    : ['--max-old-space-size=1024', dshBin, 'web', '--no-open'];
   backendLogStream.write(`\n[${new Date().toISOString()}] starting ${nodeExe} ${backendArgs.join(' ')}\n`);
   try {
     backendProcess = spawn(nodeExe, backendArgs, {
@@ -511,6 +517,7 @@ async function startBackend() {
       env: {
         ...process.env,
         NO_COLOR: '1',
+        DSH_HOME: dshHomePath(),
         ...(qwenAPIKey() ? { QWEN_API_KEY: qwenAPIKey() } : {}),
         PATH: `${path.dirname(nodeExe)};${process.env.PATH || ''}`
       },
@@ -850,6 +857,40 @@ function showModelProviderWizard() {
   providerWindow.on('closed', () => { providerWindow = undefined; });
 }
 
+function pluginMarketRoot() {
+  return path.join(app.getPath('userData'), 'PluginMarket');
+}
+
+function runPluginMarket(command, payload = {}) {
+  return new Promise((resolve) => {
+    const nodeExe = resourcePath('runtime', 'node', 'node.exe');
+    const helper = resourcePath('shared', 'plugin-market-cli.mjs');
+    const dshBin = resourcePath('runtime', 'dsh', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js');
+    const args = [helper, command, '--root', pluginMarketRoot(), '--dsh-bin', dshBin, '--node', nodeExe, '--dsh-home', dshHomePath(), '--app-version', app.getVersion(), '--platform', 'windows-x64'];
+    if (payload.id) args.push('--id', String(payload.id));
+    const child = spawn(nodeExe, args, { cwd: app.getPath('home'), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = ''; let stderr = '';
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.once('error', (error) => resolve({ ok: false, error: error.message }));
+    child.once('close', (code) => {
+      try { resolve(JSON.parse(stdout.trim().split(/\r?\n/).pop() || '{}')); }
+      catch (_) { resolve({ ok: false, error: stderr.trim() || `插件操作失败 (${code})` }); }
+    });
+  });
+}
+
+function showPluginMarketWindow() {
+  if (pluginMarketWindow && !pluginMarketWindow.isDestroyed()) { pluginMarketWindow.show(); pluginMarketWindow.focus(); return; }
+  const htmlFile = path.join(__dirname, 'plugin-market.html');
+  if (!fs.existsSync(htmlFile)) { dialog.showErrorBox(APP_NAME, '插件市场组件不完整，请重新安装最新版。'); return; }
+  pluginMarketWindow = new BrowserWindow({ width: 1020, height: 760, minWidth: 760, minHeight: 600, title: '插件市场', show: false, backgroundColor: '#fffaf0', icon: resourcePath('assets', 'icon.png'), webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  pluginMarketWindow.removeMenu();
+  pluginMarketWindow.loadFile(htmlFile);
+  pluginMarketWindow.once('ready-to-show', () => pluginMarketWindow?.show());
+  pluginMarketWindow.on('closed', () => { pluginMarketWindow = undefined; });
+}
+
 // ---------- 主题工坊(自定义主题: 颜色/壁纸/文案/吉祥物) ----------
 
 let studioWindow;
@@ -1088,6 +1129,7 @@ function refreshTrayMenu() {
     { label: '在浏览器中打开', click: () => shell.openExternal(APP_URL) },
     { label: '重试本地服务', click: () => startBackend() },
     { label: '模型服务设置…', click: () => showModelProviderWizard() },
+    { label: '插件市场…', click: () => showPluginMarketWindow() },
     { label: '检查应用更新', click: () => checkForUpdates(true) },
     { label: '复制诊断信息（含内核报错）', click: () => copyDiagnostics() },
     { label: '打开诊断日志', click: () => shell.showItemInFolder(log.transports.file.getFile().path) },
@@ -1119,6 +1161,14 @@ ipcMain.on('dsm-service', (_event, command) => {
 ipcMain.on('dsm-update', () => checkForUpdates(true));
 ipcMain.handle('dsm-status', () => ({ service: serviceStatus, update: updateStatus }));
 ipcMain.handle('dsm-diagnostics-copy', () => copyDiagnostics());
+ipcMain.handle('plugin-market-list', () => runPluginMarket('list'));
+ipcMain.handle('plugin-market-install', (_event, payload = {}) => runPluginMarket('install', payload));
+ipcMain.handle('plugin-market-disable', (_event, payload = {}) => runPluginMarket('disable', payload));
+ipcMain.handle('plugin-market-enable', (_event, payload = {}) => runPluginMarket('enable', payload));
+ipcMain.handle('plugin-market-uninstall', (_event, payload = {}) => runPluginMarket('uninstall', payload));
+ipcMain.on('plugin-market-close', (event) => {
+  if (pluginMarketWindow && !pluginMarketWindow.isDestroyed() && event.sender === pluginMarketWindow.webContents) pluginMarketWindow.close();
+});
 ipcMain.handle('dsm-theme-get', () => themeMode);
 ipcMain.handle('dsm-theme-list', () => themeList());
 ipcMain.on('dsm-theme-set', (event, mode) => {

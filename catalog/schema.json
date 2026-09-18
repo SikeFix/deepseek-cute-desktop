@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["catalogVersion", "generatedAt", "source", "plugins"],
+  "properties": {
+    "catalogVersion": {"const": 1},
+    "generatedAt": {"type": "string", "format": "date-time"},
+    "source": {"const": "https://github.com/SikeFix/deepseek-cute-desktop"},
+    "plugins": {"type": "array", "maxItems": 500, "items": {"$ref": "#/$defs/plugin"}}
+  },
+  "$defs": {
+    "i18n": {"type": "object", "required": ["zh-CN", "en"], "properties": {"zh-CN": {"type": "string", "minLength": 1}, "en": {"type": "string", "minLength": 1}}, "additionalProperties": false},
+    "plugin": {
+      "type": "object",
+      "required": ["id", "version", "name", "description", "author", "repository", "sourceCommit", "release", "platforms", "minAppVersion", "kernelVersion", "permissions", "license", "manifest", "entry", "dependencies", "review", "updatedAt"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,63}$"}, "version": {"type": "string"}, "name": {"$ref": "#/$defs/i18n"}, "description": {"$ref": "#/$defs/i18n"}, "author": {"type": "string"}, "repository": {"type": "string", "pattern": "^https://github.com/"}, "sourceCommit": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+        "release": {"type": "object", "required": ["tag", "asset", "sha256"], "properties": {"tag": {"type": "string"}, "asset": {"type": "string", "pattern": "\\.plugin\\.json$"}, "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}}, "additionalProperties": false},
+        "platforms": {"type": "array", "items": {"enum": ["windows-x64", "macos-arm64"]}, "minItems": 1}, "minAppVersion": {"type": "string"}, "maxAppVersion": {"type": "string"}, "kernelVersion": {"const": "0.1.5-rc.2"}, "permissions": {"type": "array", "items": {"enum": ["network", "workspace-read", "workspace-write", "credentials"]}}, "license": {"type": "string"}, "manifest": {"const": "plugin.json"}, "entry": {"type": "string"}, "dependencies": {"type": "array"}, "review": {"type": "object", "required": ["status", "reviewer"], "properties": {"status": {"const": "approved"}, "reviewer": {"const": "SikeFix"}}, "additionalProperties": false}, "updatedAt": {"type": "string", "format": "date-time"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

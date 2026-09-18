@@ -27,6 +27,7 @@ If this project helps you, please give it a [Star ⭐](https://github.com/SikeFi
 - API keys stored with macOS Keychain or Windows DPAPI; saving the same key does not trigger duplicate authorization or an unnecessary restart
 - User-controlled update checks, downloads, and installation; updates are never forced
 - Chinese and English documentation, with translations welcome
+- Internal preview: Settings includes a GitHub-backed plugin market for reviewed official-kernel plugins. Authors submit plugins through pull requests.
 
 ## Installation
 

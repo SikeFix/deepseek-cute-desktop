@@ -1,0 +1,25 @@
+name: validate-plugin-catalog
+on:
+  pull_request:
+    paths:
+      - 'catalog/**'
+      - 'scripts/validate-catalog.mjs'
+      - '.github/workflows/validate-catalog.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'catalog/**'
+      - 'scripts/validate-catalog.mjs'
+      - '.github/workflows/validate-catalog.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '24.18.1'}
+      - run: node scripts/validate-catalog.mjs .
+      - run: node scripts/plugin-market-test.mjs
+      - run: node scripts/audit-catalog-assets.mjs .

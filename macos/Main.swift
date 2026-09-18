@@ -420,6 +420,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     var studioWindow: NSWindow?
     var studioWebView: WKWebView?
+    var pluginMarketWindow: NSWindow?
+    var pluginMarketWebView: WKWebView?
     var statsWindow: NSWindow?
     var statsWebView: WKWebView?
     var themeMenuItems: [String: NSMenuItem] = [:]
@@ -492,6 +494,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "dsmService")
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "dsmPet")
         studioWebView?.configuration.userContentController.removeScriptMessageHandler(forName: "dsmThemeStudio")
+        pluginMarketWebView?.configuration.userContentController.removeScriptMessageHandler(forName: "dsmPluginMarket")
         statsWebView?.configuration.userContentController.removeScriptMessageHandler(forName: "dsmStats")
         if let process = backendProcess, process.isRunning {
             process.terminate()
@@ -500,6 +503,71 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             if process.isRunning { kill(process.processIdentifier, SIGKILL) }
         }
         try? backendLogHandle?.close()
+    }
+
+    // MARK: - GitHub 插件市场
+
+    func pluginMarketRoot() -> URL {
+        let fileManager = FileManager.default
+        let base = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("DeepSeek Cute/PluginMarket", isDirectory: true)
+        try? fileManager.createDirectory(at: base, withIntermediateDirectories: true)
+        return base
+    }
+
+    func dshHomeURL() -> URL {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".dsh", isDirectory: true)
+    }
+
+    @objc func openPluginMarket() {
+        if let win = pluginMarketWindow { win.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); return }
+        guard let url = Bundle.main.url(forResource: "plugin-market", withExtension: "html") else {
+            showAlert(title: "插件市场不可用", message: "应用组件不完整，请重新安装最新版。")
+            return
+        }
+        let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1020, height: 760), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+        win.title = "插件市场"
+        win.minSize = NSSize(width: 760, height: 600)
+        win.isReleasedWhenClosed = false
+        win.delegate = self
+        let config = WKWebViewConfiguration()
+        let controller = WKUserContentController()
+        controller.add(self, name: "dsmPluginMarket")
+        config.userContentController = controller
+        let web = WKWebView(frame: .zero, configuration: config)
+        web.navigationDelegate = self
+        win.contentView = web
+        pluginMarketWindow = win
+        pluginMarketWebView = web
+        win.center(); win.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+        web.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+    }
+
+    func pluginMarketReply(_ replyID: String?, _ result: [String: Any]) {
+        guard let replyID, let web = pluginMarketWebView,
+              let data = try? JSONSerialization.data(withJSONObject: result),
+              let json = String(data: data, encoding: .utf8),
+              let id = try? JSONSerialization.data(withJSONObject: replyID),
+              let idJSON = String(data: id, encoding: .utf8) else { return }
+        web.evaluateJavaScript("window.__pluginMarketReply&&window.__pluginMarketReply(\(idJSON),\(json));", completionHandler: nil)
+    }
+
+    func runPluginMarket(_ command: String, payload: [String: Any], replyID: String?) {
+        guard let node = Bundle.main.url(forResource: "node", withExtension: nil, subdirectory: "Runtime/bin"),
+              let helper = Bundle.main.url(forResource: "plugin-market-cli", withExtension: "mjs", subdirectory: "shared"),
+              let dsh = Bundle.main.url(forResource: "bin", withExtension: "js", subdirectory: "Runtime/dsh/node_modules/@deepseek-ai/dsh/lib") else {
+            pluginMarketReply(replyID, ["ok": false, "error": "插件管理运行时不完整"]); return
+        }
+        let process = Process(); process.executableURL = node
+        var args = [helper.path, command, "--root", pluginMarketRoot().path, "--dsh-bin", dsh.path, "--node", node.path, "--dsh-home", dshHomeURL().path, "--app-version", Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.8.1", "--platform", "macos-arm64"]
+        if let id = payload["id"] as? String { args += ["--id", id] }
+        process.arguments = args
+        var env = ProcessInfo.processInfo.environment; env["DSH_HOME"] = dshHomeURL().path; process.environment = env
+        let pipe = Pipe(); process.standardOutput = pipe; process.standardError = pipe
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            do { try process.run(); process.waitUntilExit(); let data = pipe.fileHandleForReading.readDataToEndOfFile(); let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? ["ok": false, "error": "插件操作失败"]; DispatchQueue.main.async { self?.pluginMarketReply(replyID, object) } }
+            catch { DispatchQueue.main.async { self?.pluginMarketReply(replyID, ["ok": false, "error": error.localizedDescription]) } }
+        }
     }
 
     func loadApp(_ url: URL? = nil) {
@@ -728,6 +796,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         if let endpoint { arguments += ["--baseURL", endpoint] }
         if let model { arguments += ["--model", model] }
         process.arguments = arguments
+        var environment = ProcessInfo.processInfo.environment
+        environment["DSH_HOME"] = dshHomeURL().path
+        process.environment = environment
         process.standardOutput = FileHandle.nullDevice
         let errorPipe = Pipe()
         process.standardError = errorPipe
@@ -1256,6 +1327,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         guard let win = notification.object as? NSWindow else { return }
         if win === studioWindow { studioWindow = nil; studioWebView = nil }
         if win === statsWindow { statsWindow = nil; statsWebView = nil }
+        if win === pluginMarketWindow { pluginMarketWindow = nil; pluginMarketWebView = nil }
     }
 
     func checkBackend(shouldRecover: Bool) {
@@ -1349,6 +1421,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         )
         var runtimeLabel = "system npx"
         var usesBundledNode = false
+        let hasPluginProfile = fileManager.fileExists(atPath: dshHomeURL().appendingPathComponent("profiles/deepseek-desktop/package.json").path)
 
         if let bundledNode, let bundledDSH,
            fileManager.isExecutableFile(atPath: bundledNode.path),
@@ -1356,23 +1429,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             process.executableURL = bundledNode
             // --max-old-space-size: 限制后端 V8 堆, 防止长会话内存持续膨胀;
             // 超过上限会触发受控崩溃, 由退避重启兜底(比无上限增长到数 GB 更稳)。
-            process.arguments = ["--max-old-space-size=1024", bundledDSH.path, "web", "--no-open"]
+            process.arguments = hasPluginProfile
+                ? ["--max-old-space-size=1024", bundledDSH.path, "--profile", "deepseek-desktop", "--no-open"]
+                : ["--max-old-space-size=1024", bundledDSH.path, "web", "--no-open"]
             usesBundledNode = true
             runtimeLabel = "bundled Node + dsh"
         } else if fileManager.isExecutableFile(atPath: "/opt/homebrew/bin/npx") {
             process.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/npx")
-            process.arguments = ["--yes", "@deepseek-ai/dsh", "web", "--no-open"]
+            process.arguments = hasPluginProfile ? ["--yes", "@deepseek-ai/dsh", "--profile", "deepseek-desktop", "--no-open"] : ["--yes", "@deepseek-ai/dsh", "web", "--no-open"]
         } else if fileManager.isExecutableFile(atPath: "/usr/local/bin/npx") {
             process.executableURL = URL(fileURLWithPath: "/usr/local/bin/npx")
-            process.arguments = ["--yes", "@deepseek-ai/dsh", "web", "--no-open"]
+            process.arguments = hasPluginProfile ? ["--yes", "@deepseek-ai/dsh", "--profile", "deepseek-desktop", "--no-open"] : ["--yes", "@deepseek-ai/dsh", "web", "--no-open"]
         } else {
             process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = ["npx", "--yes", "@deepseek-ai/dsh", "web", "--no-open"]
+            process.arguments = hasPluginProfile ? ["npx", "--yes", "@deepseek-ai/dsh", "--profile", "deepseek-desktop", "--no-open"] : ["npx", "--yes", "@deepseek-ai/dsh", "web", "--no-open"]
         }
 
         var environment = ProcessInfo.processInfo.environment
         let bundledBin = Bundle.main.resourceURL?.appendingPathComponent("Runtime/bin").path ?? ""
         environment["PATH"] = bundledBin + ":/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:" + (environment["PATH"] ?? "")
+        environment["DSH_HOME"] = dshHomeURL().path
         environment["NO_COLOR"] = "1"
         if !usesBundledNode {
             environment["NODE_OPTIONS"] = "--max-old-space-size=1024"
@@ -1556,6 +1632,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
         if message.name == "dsmThemeStudio", let payload = message.body as? [String: Any] {
             handleStudioMessage(payload)
+            return
+        }
+
+        if message.name == "dsmPluginMarket", let payload = message.body as? [String: Any], let action = payload["action"] as? String {
+            let replyID = payload["replyId"] as? String
+            if action == "close" { pluginMarketWindow?.close(); pluginMarketReply(replyID, ["ok": true]); return }
+            runPluginMarket(action, payload: payload, replyID: replyID)
             return
         }
 
@@ -1844,7 +1927,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     // MARK: - WKNavigationDelegate
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        if webView === studioWebView || webView === statsWebView { return }
+        if webView === studioWebView || webView === statsWebView || webView === pluginMarketWebView { return }
         checkBackend(shouldRecover: true)
 
     }
@@ -1925,6 +2008,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let provider = NSMenuItem(title: "模型服务设置…", action: #selector(showModelProviderWizard), keyEquivalent: "")
         provider.target = self
         menu.addItem(provider)
+        let plugins = NSMenuItem(title: "插件市场…", action: #selector(openPluginMarket), keyEquivalent: "")
+        plugins.target = self
+        menu.addItem(plugins)
         let update = NSMenuItem(title: "检查 GitHub 更新", action: #selector(checkForUpdatesFromMenu), keyEquivalent: "")
         update.target = self
         menu.addItem(update)
@@ -2054,6 +2140,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         appMenu.addItem(.separator())
         let providerItem = appMenu.addItem(withTitle: "模型服务设置…", action: #selector(AppDelegate.showModelProviderWizard), keyEquivalent: ",")
         providerItem.target = self
+        let pluginItem = appMenu.addItem(withTitle: "插件市场…", action: #selector(AppDelegate.openPluginMarket), keyEquivalent: "")
+        pluginItem.target = self
         appMenu.addItem(.separator())
         let updateItem = appMenu.addItem(withTitle: "检查 GitHub 更新", action: #selector(AppDelegate.checkForUpdatesFromMenu), keyEquivalent: "")
         updateItem.target = self
