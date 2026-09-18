@@ -45,8 +45,8 @@
 ## 校验值
 
 ```text
-13c308cd9ef55cea5e88c11340530711b0ea2b5e9aa5d0626be4f724867e2b7b  DeepSeek-M2-1.8.0.dmg
-e3e3f905fbcc2bc50e4107585c49379d187c2656a1792cc9a858751fce3a8fda  DeepSeek-Cute-Windows-x64-Setup-1.8.0.exe
+b02fcb19ebf2710af276887a0888558d56c8935dc2f03cf41a82f085695fdf68  DeepSeek-M2-1.8.0.dmg
+95c66e5c12aba5ff7cf7524ebe9dc05795e20c8d33664aa3413c8a4f1d777c6d  DeepSeek-Cute-Windows-x64-Setup-1.8.0.exe
 ```
 
 macOS 使用 `shasum -a 256 -c DeepSeek-M2-1.8.0.dmg.sha256`，Windows 使用 `certutil -hashfile DeepSeek-Cute-Windows-x64-Setup-1.8.0.exe SHA256`。
