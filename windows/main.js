@@ -32,6 +32,8 @@ let providerWindow;
 let backendProcess;
 let backendStarting = false;
 let backendLogStream;
+let backendAuthURL = '';
+let backendOutputBuffer = '';
 let backendRestartAttempts = 0;
 let lastBackendExit = '';
 let lastBackendError = '';
@@ -489,6 +491,8 @@ async function startBackend() {
   publishServiceStatus('starting', '组件已就绪，正在启动本地服务…');
   killStalePortListeners();
   backendLogStream = fs.createWriteStream(backendLogPath(), { flags: 'a' });
+  backendAuthURL = '';
+  backendOutputBuffer = '';
   // --max-old-space-size: 限制后端 V8 堆, 防止长会话内存无上限增长触发
   // 长 GC 停顿(表现为界面一卡一卡); --no-open: 内核启动/自动重启时
   // 不再弹出系统浏览器窗口。
@@ -515,8 +519,18 @@ async function startBackend() {
     return;
   }
   backendStarting = false;
-  backendProcess.stdout.pipe(backendLogStream, { end: false });
-  backendProcess.stderr.pipe(backendLogStream, { end: false });
+  const captureBackendOutput = (chunk) => {
+    backendLogStream?.write(chunk);
+    backendOutputBuffer = (backendOutputBuffer + chunk.toString('utf8')).slice(-12000);
+    const match = backendOutputBuffer.match(/https?:\/\/127\.0\.0\.1:3080\/\?[^\s\"<>]+/);
+    if (match && !backendAuthURL) {
+      backendAuthURL = match[0].replace(/[),.;]+$/, '');
+      log.info(`[backend] authentication URL received; loading in app window`);
+      loadMainURL(backendAuthURL);
+    }
+  };
+  backendProcess.stdout.on('data', captureBackendOutput);
+  backendProcess.stderr.on('data', captureBackendOutput);
   log.info(`[startup ${elapsed()}] backend spawned pid=${backendProcess.pid}`);
   waitForBackendReady().catch((error) => log.error('[backend] readiness check failed', error));
 
@@ -568,7 +582,7 @@ function showWaiting(message = '正在等待本地 DeepSeek 服务启动…') {
   mainWindow.loadFile(path.join(__dirname, 'waiting.html'), { query: { message, error } }).catch(() => {});
 }
 
-function loadMainURL(url = APP_URL) {
+function loadMainURL(url = backendAuthURL || APP_URL) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   const safeURL = new URL(url, APP_URL);
   if (!['127.0.0.1', 'localhost'].includes(safeURL.hostname)) return;
@@ -718,30 +732,7 @@ function createMainWindow() {
       }
     } catch (_) {}
   });
-  // 应用内键盘快捷键: Ctrl+K 新建会话 / Ctrl+Shift+C 复制对话 / Ctrl+T 切主题
-  // / Ctrl+, 模型设置 / Ctrl+Shift+S Token 统计。用 before-input-event 在
-  // 页面处理前拦截, 不抢占系统全局焦点(与 macOS 菜单快捷键行为一致)。
-  mainWindow.webContents.on('before-input-event', (event, input) => {
-    if (!input || input.type !== 'keyDown' || !input.control) return;
-    const key = String(input.key || '').toLowerCase();
-    const shift = Boolean(input.shift);
-    if (key === 'k' && !shift) {
-      event.preventDefault();
-      triggerNewSession();
-    } else if (key === 'c' && shift) {
-      event.preventDefault();
-      copyConversationMarkdown();
-    } else if (key === 't' && !shift) {
-      event.preventDefault();
-      cycleThemeMode();
-    } else if (key === ',') {
-      event.preventDefault();
-      showModelProviderWizard();
-    } else if (key === 's' && shift) {
-      event.preventDefault();
-      showStatsWindow();
-    }
-  });
+  // 1.8 官方模式不注册自定义快捷键，交互由官方页面处理。
   mainWindow.on('close', (event) => {
     if (!quitting) {
       event.preventDefault();
@@ -1097,30 +1088,12 @@ function restartBackendForProviderChange() {
 
 function refreshTrayMenu() {
   if (!tray) return;
-  const themeItems = themeList().map((t) => ({
-    label: t.label,
-    type: 'radio',
-    checked: themeMode === t.id,
-    click: () => applyThemeMode(t.id)
-  }));
+  // 1.8 官方模式只保留打开应用、服务设置、诊断和用户确认式更新。
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: '打开 DeepSeek', click: () => showMain() },
     { label: '在浏览器中打开', click: () => shell.openExternal(APP_URL) },
-    { label: '新建会话 (Ctrl+K)', click: () => { showMain(); triggerNewSession(); } },
-    { label: '复制当前对话为 Markdown (Ctrl+Shift+C)', click: () => copyConversationMarkdown() },
-    { label: '显示/隐藏桌面宠物', click: () => petWindow?.isVisible() ? petWindow.hide() : petWindow.showInactive() },
     { label: '重试本地服务', click: () => startBackend() },
-    {
-      label: '界面主题',
-      submenu: [
-        ...themeItems,
-        { type: 'separator' },
-        { label: '主题工坊…（创建自定义主题）', click: () => showThemeStudioWindow() }
-      ]
-    },
-    { label: 'Token 使用统计', click: () => showStatsWindow() },
     { label: '模型服务设置…', click: () => showModelProviderWizard() },
-    { label: '邀请登录 ssnh.top', click: () => shell.openExternal(WEBSITE_URL) },
     { label: '检查应用更新', click: () => checkForUpdates(true) },
     { label: '复制诊断信息（含内核报错）', click: () => copyDiagnostics() },
     { label: '打开诊断日志', click: () => shell.showItemInFolder(log.transports.file.getFile().path) },

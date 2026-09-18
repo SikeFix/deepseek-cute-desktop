@@ -1,117 +1,17 @@
 <!doctype html>
 <html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DeepSeek</title>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DeepSeek</title>
 <style>
-  :root {
-    color-scheme: dark;
-    --coral: #f36b50;
-    --sun: #f5dc26;
-    --mint: #62e8d3;
-    --slate: #587273;
-    --ink: #211a19;
-    --cream: #fff1d7;
-  }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    min-height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", sans-serif;
-    background: var(--slate);
-    color: var(--cream);
-    overflow: hidden;
-  }
-  body::before,
-  body::after {
-    content: "";
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-  }
-  body::before {
-    background: url("PopTheme/cute-boy-wallpaper.jpg") center / cover no-repeat;
-    filter: saturate(.96) contrast(.98);
-  }
-  body::after {
-    background:
-      radial-gradient(42% 36% at 86% 14%, rgba(245,220,38,.20), transparent 64%),
-      linear-gradient(90deg, rgba(25,24,24,.62), rgba(25,24,24,.40), rgba(55,68,68,.48));
-  }
-  .card {
-    position: relative;
-    z-index: 1;
-    text-align: center;
-    padding: 56px 72px;
-    border-radius: 20px;
-    background: rgba(42, 37, 35, .78);
-    border: 2px solid rgba(98, 232, 211, .40);
-    backdrop-filter: blur(30px) saturate(170%);
-    -webkit-backdrop-filter: blur(30px) saturate(170%);
-    box-shadow: 7px 8px 0 rgba(245,220,38,.76), 0 24px 64px rgba(33,26,25,.52);
-  }
-  .mascot {
-    width: 82px;
-    height: 82px;
-    display: block;
-    margin: 0 auto;
-    object-fit: cover;
-    border-radius: 24px;
-    border: 3px solid rgba(255, 255, 255, .92);
-    box-shadow: 4px 5px 0 var(--sun), 0 10px 28px rgba(243,107,80,.50);
-    filter: drop-shadow(0 10px 28px rgba(243,107,80,.50));
-    animation: float 3.4s ease-in-out infinite;
-  }
-  h1 { font-size: 28px; font-weight: 700; letter-spacing: .01em; margin-top: 18px; }
-  p { color: #e1cdb4; font-size: 14px; margin-top: 10px; line-height: 1.7; }
-  .pulse { margin: 26px auto 0; width: 9px; height: 9px; border-radius: 50%;
-    background: var(--mint); box-shadow: 0 0 0 0 rgba(98,232,211,.55); animation: pulse 1.6s ease-out infinite; }
-  button {
-    margin-top: 30px;
-    font-size: 14px;
-    font-weight: 600;
-    color: #fff;
-    background: var(--coral);
-    border: 2px solid var(--ink);
-    border-radius: 12px;
-    padding: 11px 26px;
-    cursor: pointer;
-    box-shadow: 4px 5px 0 var(--sun), 0 10px 24px rgba(33,26,25,.40);
-    transition: transform .15s ease, box-shadow .2s ease;
-  }
-  button:hover { transform: translateY(-1px); box-shadow: 5px 6px 0 var(--sun), 0 14px 30px rgba(33,26,25,.55); }
-  button:active { transform: translateY(0); }
-  @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
-  @keyframes pulse { to { box-shadow: 0 0 0 12px rgba(98,232,211,0); } }
-</style>
-</head>
-<body>
-  <div class="card">
-    <img class="mascot" src="PopTheme/cute-boy-ui-avatar-white.png" alt="">
-    <h1>DeepSeek</h1>
-    <p id="message">正在检测内置运行组件…<br>服务就绪后会立即进入主界面。</p>
-    <div class="pulse"></div>
-    <button id="retry">重新启动服务</button>
-  </div>
-  <script>
-    var message = document.getElementById('message');
-    window.__dsmSetServiceStatus = function (status) {
-      if (status === 'online') message.innerHTML = '本地服务已连接，正在进入主界面…';
-      else if (status === 'starting') message.innerHTML = '组件已就绪，正在启动本地服务…<br>第一次启动可能需要几秒。';
-      else message.innerHTML = '本地服务暂时不可用。<br>可以重试，或从菜单栏打开诊断日志。';
-    };
-    document.getElementById('retry').addEventListener('click', function () {
-      message.innerHTML = '已收到重试请求，正在重新启动…';
-      window.webkit && window.webkit.messageHandlers.dsmService.postMessage('recover');
-    });
-    setInterval(function () {
-      fetch('http://127.0.0.1:3080', { mode: 'no-cors', cache: 'no-store' })
-        .then(function () { location.replace('http://127.0.0.1:3080'); })
-        .catch(function () {});
-    }, 1000);
-  </script>
-</body>
-</html>
+:root { color-scheme: light dark; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; }
+* { box-sizing: border-box; } html,body { width:100%; height:100%; margin:0; }
+body { display:grid; place-items:center; background:Canvas; color:CanvasText; }
+.card { width:min(520px,calc(100vw - 48px)); padding:32px; text-align:center; border:1px solid color-mix(in srgb, CanvasText 18%, transparent); border-radius:12px; }
+h1 { margin:0 0 12px; font-size:24px; font-weight:600; } p { margin:10px 0; color:GrayText; line-height:1.6; }
+button { margin-top:18px; padding:9px 16px; border:1px solid color-mix(in srgb, CanvasText 28%, transparent); border-radius:7px; color:ButtonText; background:ButtonFace; cursor:pointer; }
+</style></head>
+<body><main class="card"><h1>DeepSeek</h1><p id="message">正在等待本地服务启动…</p><p id="status"></p><button id="retry">重试</button></main>
+<script>
+const message=document.getElementById('message'); const status=document.getElementById('status'); const q=new URLSearchParams(location.search).get('message'); if(q) message.textContent=q;
+window.__dsmSetServiceStatus=function(state){ status.textContent=state==='online'?'本地服务已连接，正在进入主界面…':state==='starting'?'正在启动本地服务…':'本地服务暂时不可用，请重试。'; };
+document.getElementById('retry').onclick=function(){ message.textContent='正在重试…'; window.webkit?.messageHandlers?.dsmService?.postMessage('recover'); };
+</script></body></html>

@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('deepseekDesktop', {
     if (['minimize', 'maximize', 'close'].includes(action)) ipcRenderer.send('window-action', action);
   },
   checkForUpdates: () => ipcRenderer.send('dsm-update'),
+  recoverService: () => ipcRenderer.send('dsm-service', 'recover'),
   getTheme: () => ipcRenderer.invoke('dsm-theme-get'),
   getThemeList: () => ipcRenderer.invoke('dsm-theme-list'),
   setTheme: (mode) => {

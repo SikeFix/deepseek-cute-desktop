@@ -392,6 +392,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     var backendStartedAt: Date?
     var backendLogHandle: FileHandle?
     var backendOutputPipe: Pipe?
+    var backendAuthURL: URL?
+    var backendOutputBuffer = ""
     var lastBackendExit = ""
     var consecutiveHealthFailures = 0
     var blankPageRecoveryCount = 0
@@ -528,9 +530,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         try? backendLogHandle?.close()
     }
 
-    func loadApp() {
-        guard let url = URL(string: APP_URL) else { return }
-        webView.load(URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 8))
+    func loadApp(_ url: URL? = nil) {
+        guard let target = url ?? backendAuthURL ?? URL(string: APP_URL) else { return }
+        webView.load(URLRequest(url: target, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 8))
     }
 
     func logsDirectory() -> URL {
@@ -1354,6 +1356,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         if let current = backendProcess, current.isRunning { return }
 
         publishServiceStatus("starting")
+        backendAuthURL = nil
+        backendOutputBuffer = ""
 
         // 清理占用 3080 的残留进程(上次异常退出/重复启动), 避免 EADDRINUSE
         // 造成"崩了再拉、再崩再拉"的循环与内存翻倍。
@@ -1419,16 +1423,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 guard !data.isEmpty else { return }
                 try? backendLog.write(contentsOf: data)
                 guard let text = String(data: data, encoding: .utf8) else { return }
-                let pattern = #"https?://[^\s"<>]+"#
-                guard let regex = try? NSRegularExpression(pattern: pattern),
-                      let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
-                      let range = Range(match.range, in: text),
-                      let url = URL(string: String(text[range])) else { return }
+                self?.backendOutputBuffer = (self?.backendOutputBuffer ?? "") + text
+                if let self, self.backendOutputBuffer.count > 12000 {
+                    self.backendOutputBuffer = String(self.backendOutputBuffer.suffix(12000))
+                }
+                let pattern = #"https?://127\.0\.0\.1:3080/\?[^\s"<>]+"#
+                guard let self, let regex = try? NSRegularExpression(pattern: pattern),
+                      let match = regex.firstMatch(in: self.backendOutputBuffer, range: NSRange(self.backendOutputBuffer.startIndex..., in: self.backendOutputBuffer)),
+                      let range = Range(match.range, in: self.backendOutputBuffer),
+                      let url = URL(string: String(self.backendOutputBuffer[range]).trimmingCharacters(in: CharacterSet(charactersIn: "),.;"))) else { return }
                 DispatchQueue.main.async {
-                    guard !self!.isTerminating else { return }
-                    self!.writeAppLog("opening dsh authentication URL")
-                    NSWorkspace.shared.open(url)
-                    self!.petView?.setMood(.thinking, text: "请在浏览器完成登录授权", color: .systemYellow)
+                    guard !self.isTerminating else { return }
+                    self.backendAuthURL = url
+                    self.writeAppLog("received dsh authentication URL; loading in app window")
+                    self.loadApp(url)
                 }
             }
         } else {
@@ -1943,10 +1951,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func buildStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = NSImage(systemSymbolName: "message.fill", accessibilityDescription: "DeepSeek Cute")
-        item.button?.toolTip = "DeepSeek Cute · 本地助手"
+        item.button?.image = NSImage(systemSymbolName: "message.fill", accessibilityDescription: "DeepSeek")
+        item.button?.toolTip = "DeepSeek"
 
-        let menu = NSMenu(title: "DeepSeek Cute")
+        let menu = NSMenu(title: "DeepSeek")
         let service = NSMenuItem(title: "● 服务启动中", action: nil, keyEquivalent: "")
         service.isEnabled = false
         menu.addItem(service)
@@ -1956,58 +1964,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let open = NSMenuItem(title: "打开 DeepSeek", action: #selector(activateFromPet), keyEquivalent: "")
         open.target = self
         menu.addItem(open)
-        let pet = NSMenuItem(title: "显示/隐藏桌面宠物", action: #selector(toggleDesktopPet), keyEquivalent: "")
-        pet.target = self
-        menu.addItem(pet)
-        let restart = NSMenuItem(title: "重启本地服务", action: #selector(restartBackendFromMenu), keyEquivalent: "")
+        let restart = NSMenuItem(title: "重试本地服务", action: #selector(restartBackendFromMenu), keyEquivalent: "")
         restart.target = self
         menu.addItem(restart)
-        let copyConversation = NSMenuItem(title: "复制当前对话（Markdown）", action: #selector(copyConversationMarkdown), keyEquivalent: "")
-        copyConversation.target = self
-        menu.addItem(copyConversation)
-
-        let theme = NSMenuItem(title: "界面主题", action: nil, keyEquivalent: "")
-        theme.submenu = makeThemeMenu()
-        menu.addItem(theme)
-        statusThemeMenuItem = theme
-
-        let stats = NSMenuItem(title: "Token 使用统计…", action: #selector(openStatsWindow), keyEquivalent: "")
-        stats.target = self
-        menu.addItem(stats)
-
         let provider = NSMenuItem(title: "模型服务设置…", action: #selector(showModelProviderWizard), keyEquivalent: "")
         provider.target = self
         menu.addItem(provider)
-
-        let focus = NSMenuItem(title: "专注计时", action: nil, keyEquivalent: "")
-        let focusMenu = NSMenu(title: "专注计时")
-        let focus25 = NSMenuItem(title: "专注 25 分钟", action: #selector(startFocus25), keyEquivalent: "")
-        let focus50 = NSMenuItem(title: "深度专注 50 分钟", action: #selector(startFocus50), keyEquivalent: "")
-        let break10 = NSMenuItem(title: "休息 10 分钟", action: #selector(startBreak10), keyEquivalent: "")
-        let cancel = NSMenuItem(title: "取消计时", action: #selector(cancelFocusTimer), keyEquivalent: "")
-        for entry in [focus25, focus50, break10, cancel] { entry.target = self }
-        focusMenu.addItem(focus25)
-        focusMenu.addItem(focus50)
-        focusMenu.addItem(break10)
-        focusMenu.addItem(.separator())
-        focusMenu.addItem(cancel)
-        focus.submenu = focusMenu
-        menu.addItem(focus)
-
-        rebuildHistoryMenu()
-        let history = NSMenuItem(title: "最近完成任务", action: nil, keyEquivalent: "")
-        history.submenu = historyMenu
-        menu.addItem(history)
-        menu.addItem(.separator())
-
         let update = NSMenuItem(title: "检查 GitHub 更新", action: #selector(checkForUpdatesFromMenu), keyEquivalent: "")
         update.target = self
         menu.addItem(update)
-        let login = NSMenuItem(title: "登录时自动启动", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
-        login.target = self
-        menu.addItem(login)
-        loginItemMenuItem = login
-        refreshLoginItemState()
         let logs = NSMenuItem(title: "打开诊断日志", action: #selector(openDiagnosticLogs), keyEquivalent: "")
         logs.target = self
         menu.addItem(logs)
@@ -2020,7 +1985,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
         item.menu = menu
         statusItem = item
-        refreshThemeMenuState()
     }
 
     @objc func restartBackendFromMenu() {
@@ -2131,25 +2095,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         appMenu.addItem(withTitle: "关于 " + APP_NAME, action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "隐藏 " + APP_NAME, action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
-        appMenu.addItem(withTitle: "显示/隐藏桌面宠物", action: #selector(AppDelegate.toggleDesktopPet), keyEquivalent: "p")
-        appMenu.addItem(withTitle: "测试任务完成提醒", action: #selector(AppDelegate.testPetCompletion), keyEquivalent: "")
         appMenu.addItem(.separator())
-        // 快捷操作: 新建会话 ⌘K / 复制对话 ⇧⌘C / 切换主题 ⌘T / 统计 ⇧⌘T(已有)
-        let newSessionItem = appMenu.addItem(withTitle: "新建会话", action: #selector(AppDelegate.newSessionShortcut), keyEquivalent: "k")
-        newSessionItem.target = self
-        let copyConversationItem = appMenu.addItem(withTitle: "复制当前对话（Markdown）", action: #selector(AppDelegate.copyConversationMarkdown), keyEquivalent: "c")
-        copyConversationItem.keyEquivalentModifierMask = [.command, .shift]
-        copyConversationItem.target = self
-        let cycleThemeItem = appMenu.addItem(withTitle: "下一个主题", action: #selector(AppDelegate.cycleThemeShortcut), keyEquivalent: "t")
-        cycleThemeItem.target = self
-        let themeItem = NSMenuItem(title: "界面主题", action: nil, keyEquivalent: "")
-        themeItem.submenu = makeThemeMenu()
-        appMenu.addItem(themeItem)
-        appThemeMenuItem = themeItem
-        let statsItem = appMenu.addItem(withTitle: "Token 使用统计…", action: #selector(AppDelegate.openStatsWindow), keyEquivalent: "t")
-        statsItem.keyEquivalentModifierMask = [.command, .shift]
-        statsItem.target = self
-        // ⌘, 是 macOS 上"偏好设置"的惯例快捷键
         let providerItem = appMenu.addItem(withTitle: "模型服务设置…", action: #selector(AppDelegate.showModelProviderWizard), keyEquivalent: ",")
         providerItem.target = self
         appMenu.addItem(.separator())
@@ -2191,7 +2137,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         NSApp.windowsMenu = windowMenu
 
         NSApp.mainMenu = mainMenu
-        refreshThemeMenuState()
     }
 
     @objc func reloadPage() {

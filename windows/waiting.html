@@ -1,105 +1,37 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>DeepSeek Cute</title>
-  <style>
-    :root { color-scheme: dark; font-family: "Segoe UI", system-ui, sans-serif; }
-    * { box-sizing: border-box; }
-    html, body { width:100%; height:100%; margin:0; overflow:hidden; color:#fff1dc; }
-    body {
-      background:
-        linear-gradient(100deg, rgba(16,17,18,.92), rgba(30,34,33,.64)),
-        url("assets/wallpaper.jpg") center/cover no-repeat;
-      display:grid; place-items:center;
-    }
-    .titlebar { position:fixed; inset:0 0 auto; height:38px; display:flex; align-items:center; padding-left:14px; background:linear-gradient(180deg,rgba(20,18,19,.72),transparent); -webkit-app-region:drag; }
-    .brand { font-weight:800; font-size:13px; }
-    .controls { margin-left:auto; height:38px; display:flex; -webkit-app-region:no-drag; }
-    .controls button { width:48px; border:0; color:#fff1dc; background:transparent; font-size:16px; }
-    .controls button:hover { background:rgba(85,216,194,.18); }
-    .controls button:last-child:hover { background:#e85b4f; }
-    .card { width:min(620px,calc(100vw - 72px)); padding:38px 44px 40px; border:1px solid rgba(85,216,194,.46); border-radius:28px; text-align:center; background:rgba(35,29,29,.86); backdrop-filter:blur(22px); box-shadow:10px 12px 0 rgba(245,220,38,.82),0 28px 90px rgba(0,0,0,.42); }
-    .pet { width:150px; height:150px; object-fit:contain; animation:think 1.5s ease-in-out infinite alternate; filter:drop-shadow(0 12px 18px rgba(0,0,0,.28)); }
-    h1 { margin:4px 0 10px; font-size:34px; }
-    p { margin:8px 0; color:#ead6b8; font-size:16px; }
-    .status { display:inline-flex; align-items:center; gap:9px; margin-top:20px; padding:10px 16px; border-radius:999px; background:rgba(0,0,0,.24); }
-    .dot { width:10px; height:10px; border-radius:50%; background:#55d8c2; box-shadow:0 0 18px #55d8c2; animation:pulse 1s ease-in-out infinite alternate; }
-    .retry { display:block; margin:22px auto 0; padding:12px 24px; border:2px solid #2b2020; border-radius:14px; color:white; background:#fb684f; font-weight:800; font-size:15px; box-shadow:6px 7px 0 #f5dc26; cursor:pointer; }
-    .error { display:none; margin:16px auto 0; max-width:540px; padding:10px 14px; border-radius:12px; background:rgba(251,104,79,.14); color:#ffb4a8; font-size:13px; text-align:left; word-break:break-all; white-space:pre-wrap; font-family:Consolas,monospace; }
-    .diag { display:block; margin:12px auto 0; padding:10px 20px; border:1.5px solid rgba(85,216,194,.5); border-radius:12px; color:#55d8c2; background:rgba(85,216,194,.1); font-size:14px; font-weight:700; cursor:pointer; }
-    .diag:hover { background:rgba(85,216,194,.22); }
-    .update { margin:18px auto 0; max-width:430px; padding:12px 14px; border-radius:16px; background:rgba(255,241,220,.07); color:#ead6b8; font-size:13px; }
-    .update-line { display:flex; align-items:center; justify-content:center; gap:10px; }
-    .check { border:0; padding:5px 9px; border-radius:9px; color:#55d8c2; background:rgba(85,216,194,.12); cursor:pointer; font-weight:700; }
-    .progress { display:none; height:6px; margin-top:10px; overflow:hidden; border-radius:999px; background:rgba(255,255,255,.1); }
-    .progress span { display:block; width:0; height:100%; border-radius:inherit; background:linear-gradient(90deg,#55d8c2,#f5dc26,#fb684f); transition:width .22s ease; }
-    @keyframes think { from{transform:translateY(1px) rotate(-1deg)} to{transform:translateY(-8px) rotate(1deg)} }
-    @keyframes pulse { to{transform:scale(1.25);opacity:.7} }
-  </style>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DeepSeek</title>
+<style>
+  :root { color-scheme: light dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  * { box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; margin: 0; }
+  body { display: grid; place-items: center; background: Canvas; color: CanvasText; }
+  main { width: min(520px, calc(100vw - 48px)); padding: 32px; text-align: center; border: 1px solid color-mix(in srgb, CanvasText 18%, transparent); border-radius: 12px; }
+  h1 { margin: 0 0 12px; font-size: 24px; font-weight: 600; }
+  p { margin: 10px 0; color: GrayText; line-height: 1.6; }
+  button { margin: 18px 6px 0; padding: 9px 16px; border: 1px solid color-mix(in srgb, CanvasText 28%, transparent); border-radius: 7px; color: ButtonText; background: ButtonFace; cursor: pointer; }
+  #error { display: none; text-align: left; white-space: pre-wrap; word-break: break-word; font: 12px ui-monospace, monospace; }
+</style>
 </head>
 <body>
-  <div class="titlebar"><span class="brand">✦ DeepSeek Cute</span><span class="controls"><button data-action="minimize">—</button><button data-action="maximize">□</button><button data-action="close">×</button></span></div>
-  <main class="card">
-    <img class="pet" src="assets/pet-thinking.png" alt="">
-    <h1>DeepSeek</h1>
-    <p id="message">正在等待本地 DeepSeek 服务启动…</p>
-    <div class="status"><span class="dot" id="service-dot"></span><span id="service-text">正在创建应用窗口…</span></div>
-    <div class="update">
-      <div class="update-line"><span id="update-text">启动后将自动检查 GitHub 更新</span><button class="check" id="check-update">检查更新</button></div>
-      <div class="progress" id="update-progress"><span></span></div>
-    </div>
-    <p class="error" id="error"></p>
-    <button class="retry" id="retry">立即重试</button>
-    <button class="diag" id="diag">复制诊断信息（发给开发者快速定位）</button>
-  </main>
-  <script>
-    const message = new URLSearchParams(location.search).get('message');
-    if (message) document.querySelector('#message').textContent = message;
-    const serviceText = document.querySelector('#service-text');
-    const serviceDot = document.querySelector('#service-dot');
-    const retry = document.querySelector('#retry');
-    const updateText = document.querySelector('#update-text');
-    const updateProgress = document.querySelector('#update-progress');
-    const updateBar = updateProgress.querySelector('span');
-    retry.addEventListener('click', () => {
-      serviceText.textContent = '已收到重试请求，正在重新启动…';
-      window.webkit?.messageHandlers?.dsmService?.postMessage('recover');
-    });
-    const errorEl = document.querySelector('#error');
-    const errorParam = new URLSearchParams(location.search).get('error');
-    if (errorParam) { errorEl.textContent = errorParam; errorEl.style.display = 'block'; }
-    const diag = document.querySelector('#diag');
-    diag.addEventListener('click', () => {
-      diag.textContent = '正在复制…';
-      const done = (ok) => {
-        diag.textContent = ok ? '已复制，请把剪贴板内容发给开发者' : '复制失败，请点右上角托盘菜单再试';
-        setTimeout(() => { diag.textContent = '复制诊断信息（发给开发者快速定位）'; }, 6000);
-      };
-      Promise.resolve(window.deepseekDesktop?.copyDiagnostics?.()).then((file) => done(!!file)).catch(() => done(false));
-    });
-    document.querySelector('#check-update').addEventListener('click', () => window.deepseekDesktop?.checkForUpdates());
-    const renderServiceStatus = (status) => {
-      serviceText.textContent = status.message || '正在准备本地服务…';
-      const colors = { online:'#55d8c2', starting:'#f5dc26', offline:'#fb684f' };
-      serviceDot.style.background = colors[status.state] || colors.starting;
-      serviceDot.style.boxShadow = `0 0 18px ${colors[status.state] || colors.starting}`;
-      retry.style.display = status.state === 'offline' ? 'block' : 'none';
-    };
-    const renderUpdateStatus = (status) => {
-      updateText.textContent = status.message || '正在检查更新…';
-      const downloading = status.state === 'downloading';
-      updateProgress.style.display = downloading ? 'block' : 'none';
-      updateBar.style.width = `${status.percent || 0}%`;
-    };
-    window.deepseekDesktop?.onServiceStatus?.(renderServiceStatus);
-    window.deepseekDesktop?.onUpdateStatus?.(renderUpdateStatus);
-    window.deepseekDesktop?.getStatus?.().then(({ service, update }) => {
-      renderServiceStatus(service);
-      renderUpdateStatus(update);
-    }).catch(() => {});
-    document.querySelectorAll('[data-action]').forEach(button => button.addEventListener('click', () => window.deepseekDesktop?.windowAction(button.dataset.action)));
-  </script>
+<main>
+  <h1>DeepSeek</h1>
+  <p id="message">正在等待本地服务启动…</p>
+  <p id="service-text">正在准备服务</p>
+  <p id="error"></p>
+  <button id="retry">重试</button><button id="diag">复制诊断信息</button>
+</main>
+<script>
+  const params = new URLSearchParams(location.search);
+  const message = params.get('message'); if (message) document.querySelector('#message').textContent = message;
+  const errorEl = document.querySelector('#error'); const error = params.get('error');
+  if (error) { errorEl.textContent = error; errorEl.style.display = 'block'; }
+  document.querySelector('#retry').onclick = () => window.deepseekDesktop?.recoverService?.();
+  document.querySelector('#diag').onclick = async () => { const file = await window.deepseekDesktop?.copyDiagnostics?.(); document.querySelector('#diag').textContent = file ? '已复制' : '复制失败'; };
+  window.deepseekDesktop?.onServiceStatus?.((status) => { document.querySelector('#service-text').textContent = status.message || status.state || ''; });
+  window.deepseekDesktop?.getStatus?.().then(({service}) => { document.querySelector('#service-text').textContent = service.message || service.state || ''; }).catch(() => {});
+</script>
 </body>
 </html>
