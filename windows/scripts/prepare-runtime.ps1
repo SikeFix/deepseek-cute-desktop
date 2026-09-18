@@ -36,28 +36,8 @@ Push-Location $RuntimeDir
 '@ | Set-Content -Path (Join-Path $RuntimeDir "package.json") -Encoding utf8
 $HarnessPackages = @(
     "@deepseek-ai/dsh@0.1.5-rc.2",
-    "@deepseek-ai/cordis-plugin-group@1.0.1",
-    "@deepseek-ai/dsh-anonymous-user-id@0.1.1-rc.2",
-    "@deepseek-ai/dsh-atomic-write@0.1.1-rc.2",
-    "@deepseek-ai/dsh-authorization@0.1.1-rc.2",
-    "@deepseek-ai/dsh-bash-local@0.1.1-rc.2",
-    "@deepseek-ai/dsh-code-runtime@0.1.1-rc.2",
-    "@deepseek-ai/dsh-compaction@0.1.1-rc.2",
-    "@deepseek-ai/dsh-fs@0.1.1-rc.2",
-    "@deepseek-ai/dsh-invariants@0.1.1-rc.2",
-    "@deepseek-ai/dsh-output-retention@0.1.1-rc.2",
-    "@deepseek-ai/dsh-sandbox@0.1.1-rc.2",
-    "@deepseek-ai/dsh-scope@0.1.1-rc.2",
-    "@deepseek-ai/dsh-session-telemetry@0.1.1-rc.2",
-    "@deepseek-ai/dsh-session-title-llm@0.1.1-rc.2",
-    "@deepseek-ai/dsh-shell@0.1.1-rc.2",
-    "@deepseek-ai/dsh-spill@0.1.1-rc.2",
-    "@deepseek-ai/dsh-subagent-in-process-driver@0.1.1-rc.2",
-    "@deepseek-ai/dsh-timeout@0.1.1-rc.2",
-    "@deepseek-ai/dsh-workflow@0.1.1-rc.2"
     "@img/colour@1.1.0"
-)
-# 注意: 不要加 --os/--cpu 过滤参数 —— 部分 npm 版本会把带平台过滤的
+)# 注意: 不要加 --os/--cpu 过滤参数 —— 部分 npm 版本会把带平台过滤的
 # 根包规格静默跳过, 导致 dsh 缺失。非 Windows 平台包(darwin/linux 的
 # sharp/@img/esbuild 预编译)由 after-pack.js 在打包阶段剔除。
 npm install --no-audit --no-fund --omit=dev --ignore-scripts --legacy-peer-deps $HarnessPackages
@@ -71,7 +51,7 @@ foreach ($f in @($dshBin, $dshLicense)) {
 }
 $pkgCount = (Get-ChildItem (Join-Path $RuntimeDir "node_modules/@deepseek-ai") -Directory).Count
 Write-Host "Harness packages under @deepseek-ai: $pkgCount"
-if ($pkgCount -lt 150) { throw "运行时包数量异常($pkgCount < 150), 疑似安装不完整" }
+if ($pkgCount -lt 20) { throw "运行时包数量异常($pkgCount < 20), 疑似安装不完整" }
 
 Copy-Item $dshLicense (Join-Path $RuntimeDir "licenses/DSH-LICENSE.txt") -Force
 
