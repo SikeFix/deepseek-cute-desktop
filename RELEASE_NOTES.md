@@ -1,3 +1,11 @@
+# DeepSeek Cute Desktop 1.8.1
+
+- 修复 Windows 本地内核依赖缺失导致的 `cordis-plugin-group` 启动崩溃。
+- 增加运行时完整性检查，依赖异常时停止无限重启并提示重新安装。
+- macOS 与 Windows 同步升级，继续保持官方界面与用户确认式更新。
+
+---
+
 # DeepSeek Cute Desktop 1.8.0
 
 - 回归官方 DeepSeek 界面与功能，移除自定义主题、动画、桌面宠物、顶栏和视觉覆盖层。

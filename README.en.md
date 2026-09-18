@@ -4,7 +4,7 @@
 
 [中文](README.md) · [English](README.en.md) · [⭐ Star this project](https://github.com/SikeFix/deepseek-cute-desktop)
 
-Version 1.8.0 returns to the official DeepSeek experience. Custom themes, animations, desktop pets, floating toolbars, and visual overlays have been removed. The app keeps the official conversation interface, history, model service settings, and bundled local runtime. Node.js installation and a forced browser launch are not required.
+Version 1.8.1 returns to the official DeepSeek experience. Custom themes, animations, desktop pets, floating toolbars, and visual overlays have been removed. The app keeps the official conversation interface, history, model service settings, and bundled local runtime. Node.js installation and a forced browser launch are not required.
 
 [Download the latest release](https://github.com/SikeFix/deepseek-cute-desktop/releases/latest) · [Open an issue](https://github.com/SikeFix/deepseek-cute-desktop/issues) · [Release notes](RELEASE_NOTES.md)
 
@@ -14,10 +14,10 @@ If this project helps you, please give it a [Star ⭐](https://github.com/SikeFi
 
 | Platform | Download | Requirement |
 | --- | --- | --- |
-| macOS Apple Silicon | [DeepSeek-M2-1.8.0.dmg](https://github.com/SikeFix/deepseek-cute-desktop/releases/latest/download/DeepSeek-M2-1.8.0.dmg) | macOS 13.5+, M1/M2/M3/M4 |
-| Windows x64 | [DeepSeek-Cute-Windows-x64-Setup-1.8.0.exe](https://github.com/SikeFix/deepseek-cute-desktop/releases/latest/download/DeepSeek-Cute-Windows-x64-Setup-1.8.0.exe) | Windows 10/11 x64 |
+| macOS Apple Silicon | [DeepSeek-M2-1.8.1.dmg](https://github.com/SikeFix/deepseek-cute-desktop/releases/latest/download/DeepSeek-M2-1.8.1.dmg) | macOS 13.5+, M1/M2/M3/M4 |
+| Windows x64 | [DeepSeek-Cute-Windows-x64-Setup-1.8.1.exe](https://github.com/SikeFix/deepseek-cute-desktop/releases/latest/download/DeepSeek-Cute-Windows-x64-Setup-1.8.1.exe) | Windows 10/11 x64 |
 
-## Features in 1.8.0
+## Features in 1.8.1
 
 - Official DeepSeek conversation interface and interaction flow
 - Bundled local DeepSeek runtime with automatic service startup
@@ -45,11 +45,11 @@ If the local service does not start, copy the diagnostics report from the waitin
 ## Checksums
 
 ```text
-b02fcb19ebf2710af276887a0888558d56c8935dc2f03cf41a82f085695fdf68  DeepSeek-M2-1.8.0.dmg
-95c66e5c12aba5ff7cf7524ebe9dc05795e20c8d33664aa3413c8a4f1d777c6d  DeepSeek-Cute-Windows-x64-Setup-1.8.0.exe
+b02fcb19ebf2710af276887a0888558d56c8935dc2f03cf41a82f085695fdf68  DeepSeek-M2-1.8.1.dmg
+95c66e5c12aba5ff7cf7524ebe9dc05795e20c8d33664aa3413c8a4f1d777c6d  DeepSeek-Cute-Windows-x64-Setup-1.8.1.exe
 ```
 
-On macOS run `shasum -a 256 -c DeepSeek-M2-1.8.0.dmg.sha256`. On Windows run `certutil -hashfile DeepSeek-Cute-Windows-x64-Setup-1.8.0.exe SHA256`.
+On macOS run `shasum -a 256 -c DeepSeek-M2-1.8.1.dmg.sha256`. On Windows run `certutil -hashfile DeepSeek-Cute-Windows-x64-Setup-1.8.1.exe SHA256`.
 
 ## Source
 

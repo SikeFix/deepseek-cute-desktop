@@ -37,6 +37,7 @@ let backendOutputBuffer = '';
 let backendRestartAttempts = 0;
 let lastBackendExit = '';
 let lastBackendError = '';
+let backendFatalError = false;
 let healthTimer;
 let updateTimer;
 let healthFailures = 0;
@@ -471,6 +472,11 @@ function copyDiagnostics() {
 
 async function startBackend() {
   if ((backendProcess && !backendProcess.killed) || backendStarting) return;
+  if (backendFatalError) {
+    publishServiceStatus('offline', '本地运行组件损坏，请重新安装最新版 1.8.1');
+    showWaiting('本地运行组件损坏，请重新安装最新版 1.8.1');
+    return;
+  }
   backendStarting = true;
   publishServiceStatus('starting', '正在检测本地 DeepSeek 服务…');
   if (await checkOnline()) {
@@ -551,6 +557,10 @@ async function startBackend() {
     lastBackendExit = `code=${code} signal=${signal}`;
     // 退出前先抓最后一段报错, 供等待页与诊断信息展示
     lastBackendError = code === 0 ? '' : lastBackendErrorLine();
+    if (/ERR_MODULE_NOT_FOUND|Cannot find package|does not provide an export named/.test(lastBackendError + '\n' + backendOutputBuffer)) {
+      backendFatalError = true;
+      log.error('[backend] fatal packaged runtime dependency error; automatic restart disabled');
+    }
     backendLogStream?.end(`\n[${new Date().toISOString()}] exit code=${code} signal=${signal}\n`);
     backendLogStream = undefined;
     backendProcess = undefined;
@@ -577,7 +587,7 @@ async function checkHealth(recover = true) {
 
   healthFailures += 1;
   publishServiceStatus(backendProcess ? 'starting' : 'offline');
-  if (recover && !quitting && !backendProcess) startBackend();
+  if (recover && !quitting && !backendProcess && !backendFatalError) startBackend();
   if (healthFailures > 10) showWaiting('正在恢复本地 DeepSeek 服务…');
 }
 
@@ -1102,7 +1112,7 @@ ipcMain.on('window-action', (event, action) => {
 });
 
 ipcMain.on('dsm-service', (_event, command) => {
-  if (command === 'recover') startBackend();
+  if (command === 'recover') { backendFatalError = false; lastBackendError = ''; startBackend(); }
   else checkHealth(true);
 });
 

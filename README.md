@@ -4,7 +4,7 @@
 
 [中文](README.md) · [English](README.en.md) · [⭐ Star this project](https://github.com/SikeFix/deepseek-cute-desktop)
 
-1.8.0 回归官方 DeepSeek 使用体验：移除自定义主题、动画、桌面宠物、悬浮顶栏和视觉覆盖层，只保留官方会话界面、历史记录、模型服务设置与本地运行能力。应用自带运行时，启动后不会要求用户安装 Node.js，也不会强制打开系统浏览器。
+1.8.1 回归官方 DeepSeek 使用体验：移除自定义主题、动画、桌面宠物、悬浮顶栏和视觉覆盖层，只保留官方会话界面、历史记录、模型服务设置与本地运行能力。应用自带运行时，启动后不会要求用户安装 Node.js，也不会强制打开系统浏览器。
 
 [下载最新版](https://github.com/SikeFix/deepseek-cute-desktop/releases/latest) · [提交 Issue](https://github.com/SikeFix/deepseek-cute-desktop/issues) · [查看更新日志](RELEASE_NOTES.md)
 
@@ -14,10 +14,10 @@
 
 | 系统 | 下载 | 要求 |
 | --- | --- | --- |
-| macOS Apple Silicon | [DeepSeek-M2-1.8.0.dmg](https://github.com/SikeFix/deepseek-cute-desktop/releases/latest/download/DeepSeek-M2-1.8.0.dmg) | macOS 13.5+，M1/M2/M3/M4 |
-| Windows x64 | [DeepSeek-Cute-Windows-x64-Setup-1.8.0.exe](https://github.com/SikeFix/deepseek-cute-desktop/releases/latest/download/DeepSeek-Cute-Windows-x64-Setup-1.8.0.exe) | Windows 10/11 x64 |
+| macOS Apple Silicon | [DeepSeek-M2-1.8.1.dmg](https://github.com/SikeFix/deepseek-cute-desktop/releases/latest/download/DeepSeek-M2-1.8.1.dmg) | macOS 13.5+，M1/M2/M3/M4 |
+| Windows x64 | [DeepSeek-Cute-Windows-x64-Setup-1.8.1.exe](https://github.com/SikeFix/deepseek-cute-desktop/releases/latest/download/DeepSeek-Cute-Windows-x64-Setup-1.8.1.exe) | Windows 10/11 x64 |
 
-## 1.8.0 功能
+## 1.8.1 功能
 
 - 官方 DeepSeek 会话界面和官方交互流程
 - 本地运行 DeepSeek 内核，应用启动时自动准备服务
@@ -45,11 +45,11 @@
 ## 校验值
 
 ```text
-b02fcb19ebf2710af276887a0888558d56c8935dc2f03cf41a82f085695fdf68  DeepSeek-M2-1.8.0.dmg
-95c66e5c12aba5ff7cf7524ebe9dc05795e20c8d33664aa3413c8a4f1d777c6d  DeepSeek-Cute-Windows-x64-Setup-1.8.0.exe
+b02fcb19ebf2710af276887a0888558d56c8935dc2f03cf41a82f085695fdf68  DeepSeek-M2-1.8.1.dmg
+95c66e5c12aba5ff7cf7524ebe9dc05795e20c8d33664aa3413c8a4f1d777c6d  DeepSeek-Cute-Windows-x64-Setup-1.8.1.exe
 ```
 
-macOS 使用 `shasum -a 256 -c DeepSeek-M2-1.8.0.dmg.sha256`，Windows 使用 `certutil -hashfile DeepSeek-Cute-Windows-x64-Setup-1.8.0.exe SHA256`。
+macOS 使用 `shasum -a 256 -c DeepSeek-M2-1.8.1.dmg.sha256`，Windows 使用 `certutil -hashfile DeepSeek-Cute-Windows-x64-Setup-1.8.1.exe SHA256`。
 
 ## 源码
 
