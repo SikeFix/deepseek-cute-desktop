@@ -1,50 +1,59 @@
 # DeepSeek Cute Desktop
 
-> A local-first DeepSeek desktop client that keeps the official interface and official core experience, with user-controlled updates.
+> A local desktop client that keeps the official DeepSeek interface and core workflow.
 
 [中文](README.md) · [English](README.en.md) · [⭐ Star this project](https://github.com/SikeFix/deepseek-cute-desktop)
 
-A ready-to-use DeepSeek desktop client for macOS and Windows. It includes built-in themes, a customizable theme studio, an interactive desktop pet, task notifications, token usage statistics, Markdown conversation export, diagnostics export, and support for the official DeepSeek service or a local Qwen-compatible provider.
+Version 1.8.0 returns to the official DeepSeek experience. Custom themes, animations, desktop pets, floating toolbars, and visual overlays have been removed. The app keeps the official conversation interface, history, model service settings, and bundled local runtime. Node.js installation and a forced browser launch are not required.
 
-[Download the latest release](https://github.com/SikeFix/deepseek-cute-desktop/releases/latest)
+[Download the latest release](https://github.com/SikeFix/deepseek-cute-desktop/releases/latest) · [Open an issue](https://github.com/SikeFix/deepseek-cute-desktop/issues) · [Release notes](RELEASE_NOTES.md)
+
+If this project helps you, please give it a [Star ⭐](https://github.com/SikeFix/deepseek-cute-desktop). A Star helps other users find the project and supports ongoing maintenance and translations.
 
 ## Downloads
 
-| Platform | Requirement |
-| --- | --- |
-| macOS Apple Silicon | macOS 13.5+, M1/M2/M3/M4 |
-| Windows x64 | Windows 10/11 x64 |
+| Platform | Download | Requirement |
+| --- | --- | --- |
+| macOS Apple Silicon | [DeepSeek-M2-1.8.0.dmg](https://github.com/SikeFix/deepseek-cute-desktop/releases/latest/download/DeepSeek-M2-1.8.0.dmg) | macOS 13.5+, M1/M2/M3/M4 |
+| Windows x64 | [DeepSeek-Cute-Windows-x64-Setup-1.8.0.exe](https://github.com/SikeFix/deepseek-cute-desktop/releases/latest/download/DeepSeek-Cute-Windows-x64-Setup-1.8.0.exe) | Windows 10/11 x64 |
 
-No separate Node.js installation or terminal command is required. The bundled runtime starts automatically.
+## Features in 1.8.0
 
-## Features
+- Official DeepSeek conversation interface and interaction flow
+- Bundled local DeepSeek runtime with automatic service startup
+- Local history and workspace data
+- Model service settings and connection status
+- Copyable diagnostics and log export for issue reports
+- API keys stored with macOS Keychain or Windows DPAPI; saving the same key does not trigger duplicate authorization or an unnecessary restart
+- User-controlled update checks, downloads, and installation; updates are never forced
+- Chinese and English documentation, with translations welcome
 
-- Five built-in visual themes and a persistent theme studio
-- Interactive desktop pet with idle, thinking, completed, and error states
-- Task completion notifications and tray/menu-bar resident mode
-- Token usage statistics with cached fast startup
-- Copy the current conversation as Markdown
-- One-click diagnostics export with sensitive values redacted
-- Official DeepSeek provider and configurable Qwen-compatible provider
-- Optional updates: the app never downloads or installs updates without user confirmation
+## Installation
 
-## Provider setup
+### macOS
 
-Open **Model service settings** from the tray menu or use `Ctrl/Cmd + ,`. Official DeepSeek uses the bundled provider. For a Qwen-compatible service, enter an HTTPS endpoint, model name, and API key. Credentials are stored using the operating system secure storage when available. Submitting the same key again does not trigger a duplicate authorization or unnecessary backend restart.
+Open the DMG and drag DeepSeek to Applications. The community package uses an ad-hoc signature and is not notarized by Apple. If macOS blocks the first launch, right-click the app in Finder and choose **Open**.
 
-## Keyboard shortcuts
+### Windows
 
-- New session: `Ctrl/Cmd + K`
-- Copy conversation as Markdown: `Ctrl/Cmd + Shift + C`
-- Switch theme: `Ctrl/Cmd + T`
-- Model service settings: `Ctrl/Cmd + ,`
+Run the Setup EXE and follow the installer. The community package does not use a commercial code-signing certificate, so Windows SmartScreen may show a warning. Verify the SHA256 value before running it.
 
 ## Troubleshooting
 
-If the local service does not start, use **Copy diagnostics** on the waiting page and attach the generated report when opening an issue. The report redacts API keys and other sensitive values.
+If the local service does not start, copy the diagnostics report from the waiting page and attach it to an [issue](https://github.com/SikeFix/deepseek-cute-desktop/issues) with your OS and app versions. API keys and other sensitive values are redacted.
 
-## Development
+## Checksums
 
-Windows packaging runs in GitHub Actions and prepares the bundled Node.js and DeepSeek runtime before invoking electron-builder. See [`windows/BUILD.md`](windows/BUILD.md) for local build notes.
+```text
+13c308cd9ef55cea5e88c11340530711b0ea2b5e9aa5d0626be4f724867e2b7b  DeepSeek-M2-1.8.0.dmg
+e3e3f905fbcc2bc50e4107585c49379d187c2656a1792cc9a858751fce3a8fda  DeepSeek-Cute-Windows-x64-Setup-1.8.0.exe
+```
 
-Please open an issue with your OS version, app version, and diagnostics when reporting a problem. If the project helps you, please consider giving it a [Star](https://github.com/SikeFix/deepseek-cute-desktop) to support continued maintenance.
+On macOS run `shasum -a 256 -c DeepSeek-M2-1.8.0.dmg.sha256`. On Windows run `certutil -hashfile DeepSeek-Cute-Windows-x64-Setup-1.8.0.exe SHA256`.
+
+## Source
+
+- `windows/`: Electron shell, tray, and local service management
+- `macos/`: Swift + WebKit native shell and local service management
+
+This project is not an official DeepSeek product; see [NOTICE.md](NOTICE.md). The source is MIT licensed, while bundled runtimes retain their own licenses.
