@@ -51,6 +51,7 @@ jobs:
           $required = @(
             (Join-Path $appDir 'resources\runtime\node\node.exe'),
             (Join-Path $nm '@deepseek-ai\dsh\lib\bin.js'),
+            (Join-Path $nm '@deepseek-ai\cordis-plugin-group\lib\index.js'),
             (Join-Path $nm '@standard-schema\spec\package.json'),
             (Join-Path $nm 'yaml\dist\doc\Document.js'),
             (Join-Path $nm 'yaml\dist\index.js')

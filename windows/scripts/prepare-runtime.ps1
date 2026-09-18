@@ -36,6 +36,9 @@ Push-Location $RuntimeDir
 '@ | Set-Content -Path (Join-Path $RuntimeDir "package.json") -Encoding utf8
 $HarnessPackages = @(
     "@deepseek-ai/dsh@0.1.5-rc.2",
+    # dsh-app-boot imports this package at runtime; pin it at the root so
+    # npm/electron-builder cannot flatten it away from the packaged tree.
+    "@deepseek-ai/cordis-plugin-group@1.0.2",
     "@img/colour@1.1.0"
 )
 # 注意: 不要加 --os/--cpu 过滤参数 —— 部分 npm 版本会把带平台过滤的
