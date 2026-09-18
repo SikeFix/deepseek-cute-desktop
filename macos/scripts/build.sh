@@ -3,6 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 ROOT="$PWD"
 OUT="${BUILD_OUTPUT:-$ROOT/build-macos}"
+OUT="$(cd "$OUT" 2>/dev/null && pwd || (mkdir -p "$OUT" && cd "$OUT" && pwd))"
 APP="$OUT/DeepSeek.app"
 VER=$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' macos/Info.plist)
 NODE_VERSION=24.18.1
