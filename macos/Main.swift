@@ -618,12 +618,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func startUpdateMonitor() {
         updateTimer?.invalidate()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 12) { [weak self] in
-            self?.checkForUpdates(manual: false)
-        }
-        updateTimer = Timer.scheduledTimer(withTimeInterval: 6 * 60 * 60, repeats: true) { [weak self] _ in
-            self?.checkForUpdates(manual: false)
-        }
+        // Updates are initiated explicitly from the menu.
+        updateTimer = nil
     }
 
     @objc func checkForUpdatesFromMenu() {
