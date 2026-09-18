@@ -437,39 +437,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let config = WKWebViewConfiguration()
         let controller = WKUserContentController()
 
-        // 注入当前生效主题(官方/内置/用户自定义)。自定义主题文件保存在
-        // 用户目录, 应用更新(替换 Bundle)不会丢失; 这里只注入激活主题,
-        // 切换时由 applyInterfaceTheme 重新写入 <style>。
-        let activeID = activeThemeID()
-        let activeMascot = customTheme(activeID)?["mascot"] as? String ?? ""
-        if let script = dsmThemeScript(css: loadThemeCSS(activeID) ?? "", id: activeID, mascot: activeMascot) {
-            controller.addUserScript(WKUserScript(source: script, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
-        }
-
-        // 应用外观层(与主题无关): 顶部悬浮栏 + 状态胶囊 + 吉祥物头像。
-        if let chromeCSS = Bundle.main.url(forResource: "app-chrome", withExtension: "css"),
-           let css = try? String(contentsOf: chromeCSS, encoding: .utf8),
-           let jsonData = try? JSONSerialization.data(withJSONObject: [css]),
-           let json = String(data: jsonData, encoding: .utf8) {
-            controller.addUserScript(WKUserScript(source: "(function(){try{var s=document.createElement('style');s.id='dsm-chrome-style';s.textContent=" + json + ";document.documentElement.appendChild(s);}catch(e){}})();", injectionTime: .atDocumentEnd, forMainFrameOnly: true))
-        }
-        if let chromeJS = Bundle.main.url(forResource: "app-chrome", withExtension: "js"),
-           let js = try? String(contentsOf: chromeJS, encoding: .utf8) {
-            controller.addUserScript(WKUserScript(source: js, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
-        }
-
-        // 轻量本地互动：按钮波纹、指针柔光和滚动阅读增强。
-        if let interactionsURL = Bundle.main.url(forResource: "interactions", withExtension: "js"),
-           let interactions = try? String(contentsOf: interactionsURL, encoding: .utf8) {
-            controller.addUserScript(WKUserScript(source: interactions, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
-        }
-        // 会话导出层: 复制对话 Markdown / 新建会话 / 首次快捷键提示。
-        if let exportURL = Bundle.main.url(forResource: "conversation-export", withExtension: "js"),
-           let exportJS = try? String(contentsOf: exportURL, encoding: .utf8) {
-            controller.addUserScript(WKUserScript(source: exportJS, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
-        }
+        // 1.8 使用官方 DeepSeek 界面，不注入主题、动画、顶栏、宠物或导出脚本。
         controller.add(self, name: "dsmService")
-        controller.add(self, name: "dsmPet")
         config.userContentController = controller
 
         webView = WKWebView(frame: .zero, configuration: config)
@@ -517,8 +486,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         window.setFrameAutosaveName("DeepSeekMainWindow")
         window.makeKeyAndOrderFront(nil)
 
-        buildDesktopPet()
-        syncPetMascot()
         configureNotifications()
 
         showOffline()

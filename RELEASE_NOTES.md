@@ -1,3 +1,11 @@
+# DeepSeek Cute Desktop 1.8.0
+
+- 回归官方 DeepSeek 界面与功能，移除自定义主题、动画、桌面宠物、顶栏和视觉覆盖层。
+- macOS 与 Windows 同步升级。
+- 保留本地内核、历史会话、模型服务配置、诊断与用户确认式更新。
+
+---
+
 # DeepSeek Cute Desktop 1.7.4
 
 ## 本次更新

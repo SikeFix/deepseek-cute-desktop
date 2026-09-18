@@ -1,6 +1,6 @@
 # DeepSeek Cute Desktop
 
-> A cute, local-first DeepSeek desktop client with themes, a desktop pet, and user-controlled updates.
+> A local-first DeepSeek desktop client that keeps the official interface and official core experience, with user-controlled updates.
 
 [中文](README.md) · [English](README.en.md) · [⭐ Star this project](https://github.com/SikeFix/deepseek-cute-desktop)
 

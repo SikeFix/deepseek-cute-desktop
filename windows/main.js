@@ -660,6 +660,9 @@ function syncMascotAssets(mascot) {
 }
 
 async function injectTheme() {
+  // 1.8 uses the official DeepSeek interface without custom themes, effects, pets, or overlays.
+  return;
+  /* legacy custom visual layer retained for rollback
   if (!mainWindow || mainWindow.isDestroyed()) return;
   const currentURL = mainWindow.webContents.getURL();
   if (!currentURL.startsWith(APP_URL)) return;
@@ -674,6 +677,7 @@ async function injectTheme() {
   // 会话导出层: 复制对话 Markdown / 新建会话 / 首次快捷键提示
   const exportJS = fs.readFileSync(path.join(__dirname, 'conversation-export.js'), 'utf8');
   mainWindow.webContents.executeJavaScript(exportJS).catch(() => {});
+  */
 }
 
 function createMainWindow() {
@@ -1273,7 +1277,7 @@ else {
     const savedTheme = preferences().themeMode;
     themeMode = isValidTheme(savedTheme) ? savedTheme : 'cute';
     createMainWindow();
-    createPetWindow();
+    // Official 1.8 UI: no desktop pet window.
     createTray();
     syncMascotAssets(customTheme(themeMode)?.mascot || '');
     startBackend();
