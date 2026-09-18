@@ -394,6 +394,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     var backendOutputPipe: Pipe?
     var lastBackendExit = ""
     var consecutiveHealthFailures = 0
+    var blankPageRecoveryCount = 0
     var isTerminating = false
     var statusItem: NSStatusItem?
     var serviceMenuItem: NSMenuItem?
@@ -1901,6 +1902,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             NSLog("DSM_THEME_CHECK: %@", ok ? "true" : "false")
         }
         checkBackend(shouldRecover: true)
+        // WebKit can finish the shell while the conversation bundle fails to
+        // hydrate. This presents as a connected sidebar with a blank main pane.
+        // Give the app a short hydration window, then reload once before showing
+        // the offline/retry screen.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self, weak webView] in
+            guard let self, let webView, !self.isTerminating else { return }
+            webView.evaluateJavaScript("Boolean(document.querySelector('textarea,[contenteditable=\"true\"],[data-slot*=\"conversation\"]'))") { result, _ in
+                let hydrated = (result as? NSNumber)?.boolValue ?? false
+                if hydrated { self.blankPageRecoveryCount = 0; return }
+                guard self.blankPageRecoveryCount < 1 else { return }
+                self.blankPageRecoveryCount += 1
+                self.writeAppLog("webview shell loaded without conversation composer; reloading")
+                self.loadApp()
+            }
+        }
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
