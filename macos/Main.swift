@@ -450,56 +450,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
         window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1440, height: 920),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered, defer: false)
         window.title = APP_NAME
-        window.titleVisibility = .hidden
-        window.titlebarAppearsTransparent = true
-        window.titlebarSeparatorStyle = .none
-        window.isMovableByWindowBackground = true
-        window.isOpaque = false
-        window.backgroundColor = .clear
+        window.titleVisibility = .visible
+        window.titlebarAppearsTransparent = false
+        window.isOpaque = true
+        window.backgroundColor = .windowBackgroundColor
         window.center()
         window.minSize = NSSize(width: 1000, height: 660)
 
-        // contentView 换成容器: WebView 铺满 + 顶部 52px 透明拖拽条(与页面
-        // 悬浮栏同高), 让"按住顶栏拖动窗口"恢复可用(WebView 会拦截背景拖动)。
-        let container = ChromeContainerView()
-        container.translatesAutoresizingMaskIntoConstraints = false
-        webView.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(webView)
-        NSLayoutConstraint.activate([
-            webView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            webView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            webView.topAnchor.constraint(equalTo: container.topAnchor),
-            webView.bottomAnchor.constraint(equalTo: container.bottomAnchor)
-        ])
-        let dragBar = TitleBarDragView(frame: .zero)
-        dragBar.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(dragBar)
-        NSLayoutConstraint.activate([
-            dragBar.topAnchor.constraint(equalTo: container.topAnchor),
-            dragBar.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            dragBar.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            dragBar.heightAnchor.constraint(equalToConstant: TitleBarDragView.height)
-        ])
-        window.contentView = container
+        window.contentView = webView
         window.isReleasedWhenClosed = false
         window.setFrameAutosaveName("DeepSeekMainWindow")
         window.makeKeyAndOrderFront(nil)
 
-        configureNotifications()
 
         showOffline()
         startBackendIfNeeded()
         startHealthMonitor()
         startUpdateMonitor()
         NSApp.activate(ignoringOtherApps: true)
-        if UserDefaults.standard.string(forKey: "DSMProviderWizardVersion") != providerWizardVersion {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
-                self?.showModelProviderWizard()
-            }
-        }
+
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -1422,21 +1394,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 let data = reader.availableData
                 guard !data.isEmpty else { return }
                 try? backendLog.write(contentsOf: data)
-                guard let text = String(data: data, encoding: .utf8) else { return }
-                self?.backendOutputBuffer = (self?.backendOutputBuffer ?? "") + text
-                if let self, self.backendOutputBuffer.count > 12000 {
+                let text = String(decoding: data, as: UTF8.self)
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, !self.isTerminating, self.backendProcess === process else { return }
+                    self.backendOutputBuffer += text
+                    while let newline = self.backendOutputBuffer.firstIndex(of: "\n") {
+                        let line = String(self.backendOutputBuffer[..<newline])
+                        self.backendOutputBuffer.removeSubrange(...newline)
+                        guard self.backendAuthURL == nil,
+                              let marker = line.range(of: "dsh web: http://127.0.0.1:3080/?") else { continue }
+                        let candidate = line[marker.lowerBound...].dropFirst("dsh web: ".count).split(whereSeparator: { $0.isWhitespace }).first ?? ""
+                        guard let url = URL(string: String(candidate)), url.host == "127.0.0.1", url.port == 3080 else { continue }
+                        self.backendAuthURL = url
+                        self.writeAppLog("received local authentication URL; loading in app window")
+                        self.loadApp(url)
+                    }
                     self.backendOutputBuffer = String(self.backendOutputBuffer.suffix(12000))
-                }
-                let pattern = #"https?://127\.0\.0\.1:3080/\?[^\s"<>]+"#
-                guard let self, let regex = try? NSRegularExpression(pattern: pattern),
-                      let match = regex.firstMatch(in: self.backendOutputBuffer, range: NSRange(self.backendOutputBuffer.startIndex..., in: self.backendOutputBuffer)),
-                      let range = Range(match.range, in: self.backendOutputBuffer),
-                      let url = URL(string: String(self.backendOutputBuffer[range]).trimmingCharacters(in: CharacterSet(charactersIn: "),.;"))) else { return }
-                DispatchQueue.main.async {
-                    guard !self.isTerminating else { return }
-                    self.backendAuthURL = url
-                    self.writeAppLog("received dsh authentication URL; loading in app window")
-                    self.loadApp(url)
                 }
             }
         } else {
@@ -1872,26 +1845,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         if webView === studioWebView || webView === statsWebView { return }
-        webView.evaluateJavaScript("Boolean(window.__dsmMac)") { result, _ in
-            let ok = (result as? NSNumber)?.boolValue ?? false
-            NSLog("DSM_THEME_CHECK: %@", ok ? "true" : "false")
-        }
         checkBackend(shouldRecover: true)
-        // WebKit can finish the shell while the conversation bundle fails to
-        // hydrate. This presents as a connected sidebar with a blank main pane.
-        // Give the app a short hydration window, then reload once before showing
-        // the offline/retry screen.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self, weak webView] in
-            guard let self, let webView, !self.isTerminating else { return }
-            webView.evaluateJavaScript("Boolean(document.querySelector('textarea,[contenteditable=\"true\"],[data-slot*=\"conversation\"]'))") { result, _ in
-                let hydrated = (result as? NSNumber)?.boolValue ?? false
-                if hydrated { self.blankPageRecoveryCount = 0; return }
-                guard self.blankPageRecoveryCount < 1 else { return }
-                self.blankPageRecoveryCount += 1
-                self.writeAppLog("webview shell loaded without conversation composer; reloading")
-                self.loadApp()
-            }
-        }
+
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
@@ -2008,7 +1963,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     /// 诊断内容脱敏: 任何带 API 密钥的行都不允许出现在剪贴板/导出文件里
     func sanitizedDiagnostics(_ text: String) -> String {
-        text.split(separator: "\n", omittingEmptySubsequences: false)
+        text.replacingOccurrences(of: #"([?&]token=)[^&\s]+"#, with: "$1[REDACTED]", options: .regularExpression)
+            .split(separator: "\n", omittingEmptySubsequences: false)
             .filter { line in
                 if line.range(of: #"sk-[A-Za-z0-9_-]{8,}"#, options: .regularExpression) != nil { return false }
                 if line.range(of: #"api[_-]?key\s*[=:]\s*\S"#, options: [.regularExpression, .caseInsensitive]) != nil { return false }

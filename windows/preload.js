@@ -2,12 +2,9 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('webkit', {
   messageHandlers: {
-    dsmService: { postMessage: (message) => ipcRenderer.send('dsm-service', message) },
-    dsmPet: { postMessage: (message) => ipcRenderer.send('dsm-pet', message) }
+    dsmService: { postMessage: (message) => ipcRenderer.send('dsm-service', message) }
   }
 });
-
-const THEME_MODES = ['official', 'cute', 'aurora', 'paper', 'deepsea'];
 
 contextBridge.exposeInMainWorld('deepseekDesktop', {
   windowAction: (action) => {
@@ -15,15 +12,6 @@ contextBridge.exposeInMainWorld('deepseekDesktop', {
   },
   checkForUpdates: () => ipcRenderer.send('dsm-update'),
   recoverService: () => ipcRenderer.send('dsm-service', 'recover'),
-  getTheme: () => ipcRenderer.invoke('dsm-theme-get'),
-  getThemeList: () => ipcRenderer.invoke('dsm-theme-list'),
-  setTheme: (mode) => {
-    if (THEME_MODES.includes(mode)) ipcRenderer.send('dsm-theme-set', mode);
-  },
-  openModelSettings: () => ipcRenderer.send('dsm-provider-open'),
-  openThemeStudio: () => ipcRenderer.send('dsm-studio-open'),
-  openStats: () => ipcRenderer.send('dsm-stats-open'),
-  openInviteLogin: () => ipcRenderer.send('dsm-open-website'),
   getStatus: () => ipcRenderer.invoke('dsm-status'),
   copyDiagnostics: () => ipcRenderer.invoke('dsm-diagnostics-copy'),
   onServiceStatus: (callback) => ipcRenderer.on('service-status', (_event, status) => callback(status)),

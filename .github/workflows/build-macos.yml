@@ -12,23 +12,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: {node-version: 24}
-      - name: Prepare app bundle
-        shell: bash
-        run: |
-          set -euo pipefail
-          APP="build/DeepSeek.app"
-          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/Runtime/bin" "$APP/Contents/Resources/Runtime/dsh"
-          cp macos/Info.plist "$APP/Contents/Info.plist"
-          cp -R macos/Resources/. "$APP/Contents/Resources/"
-          curl -fsSL https://nodejs.org/dist/v24.18.1/node-v24.18.1-darwin-arm64.tar.gz | tar -xz -C /tmp
-          cp /tmp/node-v24.18.1-darwin-arm64/bin/node "$APP/Contents/Resources/Runtime/bin/node"
-          cd "$APP/Contents/Resources/Runtime/dsh"
-          printf '{"name":"deepseek-runtime","private":true}\n' > package.json
-          npm install --no-audit --no-fund --omit=dev --ignore-scripts --legacy-peer-deps @deepseek-ai/dsh@0.1.5-rc.2
-          cd - >/dev/null
-          swiftc macos/Main.swift -o "$APP/Contents/MacOS/DeepSeek" -framework Cocoa -framework WebKit -framework UserNotifications -framework ServiceManagement -framework Security
-          chmod +x "$APP/Contents/MacOS/DeepSeek" "$APP/Contents/Resources/Runtime/bin/node"
-          hdiutil create -volname "DeepSeek Cute" -srcfolder "$APP" -ov -format UDZO "DeepSeek-M2-${GITHUB_REF_NAME#v}.dmg"
-      - name: Upload release asset
+      - name: Build and verify signed app bundle
+        run: BUILD_OUTPUT=build-macos bash macos/scripts/build.sh
+      - name: Smoke test packaged runtime
+        run: node scripts/smoke-runtime.mjs build-macos/DeepSeek.app/Contents/Resources/Runtime/bin/node build-macos/DeepSeek.app/Contents/Resources/Runtime/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js
+      - name: Upload release assets
         env: {GH_TOKEN: '${{ github.token }}'}
-        run: gh release upload "${GITHUB_REF_NAME}" "DeepSeek-M2-${GITHUB_REF_NAME#v}.dmg" --clobber
+        run: |
+          ver=$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' macos/Info.plist)
+          gh release upload "v$ver" "build-macos/DeepSeek-M2-$ver.dmg" "build-macos/DeepSeek-M2-$ver.dmg.sha256" --clobber

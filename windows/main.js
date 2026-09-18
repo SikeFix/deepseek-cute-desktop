@@ -416,6 +416,7 @@ function tailLines(filePath, maxLines, maxChars = 60000) {
 // 脱敏: 诊断内容绝不包含任何 API 密钥(即使内核把 env 打到日志里)
 function sanitizeDiagnostics(text) {
   return text
+    .replace(/([?&](?:token|dsh_token|dshToken)=)[^&\s]+/gi, '$1[REDACTED]')
     .split('\n')
     .filter((line) => !/sk-[A-Za-z0-9_-]{8,}/.test(line) && !/api[_-]?key\s*[=:]\s*\S/i.test(line))
     .join('\n');
@@ -522,11 +523,15 @@ async function startBackend() {
   const captureBackendOutput = (chunk) => {
     backendLogStream?.write(chunk);
     backendOutputBuffer = (backendOutputBuffer + chunk.toString('utf8')).slice(-12000);
-    const match = backendOutputBuffer.match(/https?:\/\/127\.0\.0\.1:3080\/\?[^\s\"<>]+/);
-    if (match && !backendAuthURL) {
-      backendAuthURL = match[0].replace(/[),.;]+$/, '');
-      log.info(`[backend] authentication URL received; loading in app window`);
-      loadMainURL(backendAuthURL);
+    const lines = backendOutputBuffer.split('\n');
+    backendOutputBuffer = lines.pop();
+    for (const line of lines) {
+      const match = line.match(/dsh web: (http:\/\/127\.0\.0\.1:3080\/\?token=[^\s]+)/);
+      if (match && !backendAuthURL) {
+        backendAuthURL = match[1];
+        log.info('[backend] authentication URL received; loading in app window');
+        loadMainURL(backendAuthURL);
+      }
     }
   };
   backendProcess.stdout.on('data', captureBackendOutput);
@@ -673,34 +678,14 @@ function syncMascotAssets(mascot) {
   } catch (_) {}
 }
 
-async function injectTheme() {
-  // 1.8 uses the official DeepSeek interface without custom themes, effects, pets, or overlays.
-  return;
-  /* legacy custom visual layer retained for rollback
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  const currentURL = mainWindow.webContents.getURL();
-  if (!currentURL.startsWith(APP_URL)) return;
-  const interactions = fs.readFileSync(resourcePath('theme', 'interactions.js'), 'utf8');
-  const windowsChrome = fs.readFileSync(path.join(__dirname, 'window-inject.js'), 'utf8');
-  const savedTheme = preferences().themeMode;
-  themeMode = isValidTheme(savedTheme) ? savedTheme : 'cute';
-  await mainWindow.webContents.executeJavaScript(`window.__dsmThemeMode=${JSON.stringify(themeMode === 'official' ? 'official' : 'cute')}`).catch(() => {});
-  await applyThemeMode(themeMode, false);
-  mainWindow.webContents.executeJavaScript(interactions).catch(() => {});
-  mainWindow.webContents.executeJavaScript(windowsChrome).catch(() => {});
-  // 会话导出层: 复制对话 Markdown / 新建会话 / 首次快捷键提示
-  const exportJS = fs.readFileSync(path.join(__dirname, 'conversation-export.js'), 'utf8');
-  mainWindow.webContents.executeJavaScript(exportJS).catch(() => {});
-  */
-}
-
 function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 1000,
     minHeight: 660,
-    frame: false,
+    frame: true,
+    autoHideMenuBar: true,
     show: true,
     backgroundColor: '#17191a',
     icon: resourcePath('assets', 'icon.png'),
@@ -713,10 +698,9 @@ function createMainWindow() {
   });
 
   mainWindow.webContents.on('did-finish-load', () => {
-    log.info(`[startup ${elapsed()}] renderer ready ${mainWindow.webContents.getURL()}`);
+    log.info(`[startup ${elapsed()}] renderer ready ${new URL(mainWindow.webContents.getURL()).pathname}`);
     sendRendererStatus('service-status', serviceStatus);
     sendRendererStatus('update-status', updateStatus);
-    injectTheme();
   });
   mainWindow.webContents.on('did-fail-load', () => showWaiting());
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -1247,18 +1231,13 @@ else {
   app.on('second-instance', () => showMain());
   app.whenReady().then(() => {
     log.info(`[startup ${elapsed()}] app ready version=${app.getVersion()} packaged=${app.isPackaged}`);
-    const savedTheme = preferences().themeMode;
-    themeMode = isValidTheme(savedTheme) ? savedTheme : 'cute';
+    themeMode = 'official';
     createMainWindow();
     // Official 1.8 UI: no desktop pet window.
     createTray();
-    syncMascotAssets(customTheme(themeMode)?.mascot || '');
     startBackend();
     setupAutoUpdater();
     healthTimer = setInterval(() => checkHealth(true), 5000);
-    if (preferences().providerWizardVersion !== PROVIDER_WIZARD_VERSION) {
-      setTimeout(() => showModelProviderWizard(), 1400);
-    }
   });
 }
 

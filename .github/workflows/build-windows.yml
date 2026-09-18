@@ -65,6 +65,9 @@ jobs:
             Write-Host "OK: $full"
           }
 
+      - name: Smoke test packaged runtime
+        run: node scripts/smoke-runtime.mjs windows/dist/win-unpacked/resources/runtime/node/node.exe windows/dist/win-unpacked/resources/runtime/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js
+
       - name: Update release assets (clobber)
         working-directory: windows
         shell: bash
@@ -80,7 +83,7 @@ jobs:
           exe="$(ls dist/*.exe | head -1)"
           name="$(basename "$exe")"
           # Git Bash 没有 shasum, 用 sha256sum(输出格式同为 "hash  文件名")
-          sha256sum "$exe" > "$name.sha256"
+          (cd dist && sha256sum "$name") > "$name.sha256"
           gh release upload "$tag" "$exe" "dist/latest.yml" "dist/$name.blockmap" "$name.sha256" --clobber
           echo "Release $tag 资产已更新"
 
