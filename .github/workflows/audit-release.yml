@@ -1,0 +1,87 @@
+name: audit-release
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release to download and install
+        required: true
+        default: v1.8.1
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '24.18.1'}
+      - run: npm ci --prefix scripts/audit-tools --ignore-scripts --no-audit --no-fund
+      - name: Download, verify and install the published EXE
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AUDIT_TAG: ${{ inputs.tag }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          gh release download $env:AUDIT_TAG --pattern '*.exe' --pattern '*.exe.sha256' --dir release-download
+          if ($LASTEXITCODE -ne 0) { throw 'Release download failed' }
+          $exe = (Get-ChildItem release-download/*.exe).FullName
+          $expected = ((Get-Content "$exe.sha256").Trim() -split '\s+')[0]
+          $actual = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw 'Published EXE checksum mismatch' }
+          $dest = Join-Path $env:RUNNER_TEMP '中文安装路径\DeepSeek Audit'
+          $p = Start-Process -FilePath $exe -ArgumentList "/S /D=$dest" -PassThru -Wait
+          if ($p.ExitCode -ne 0) { throw "Installer failed: $($p.ExitCode)" }
+          Get-Process | Where-Object { $_.Path -and $_.Path.StartsWith($dest) } | Stop-Process -Force
+          if (-not (Test-Path "$dest\resources\runtime\node\node.exe")) { throw 'Installed runtime missing' }
+          "AUDIT_APP=$dest" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          New-Item -ItemType Directory -Force audit-results | Out-Null
+          "SHA256 $actual; installer exit=$($p.ExitCode); installed in Chinese path" | Set-Content audit-results/installer.txt
+      - name: Audit all installed runtime package dependencies and official server imports
+        shell: pwsh
+        run: node scripts/audit-tools/audit.mjs "$env:AUDIT_APP/resources/runtime/dsh/node_modules" audit-results/windows-packages.json
+      - name: Test installed native runtime tools
+        shell: pwsh
+        run: '& "$env:AUDIT_APP/resources/runtime/node/node.exe" scripts/audit-native.mjs "$env:AUDIT_APP/resources/runtime/dsh/node_modules"'
+      - name: Start installed runtime with isolated Chinese user data
+        shell: pwsh
+        run: node scripts/smoke-runtime.mjs "$env:AUDIT_APP/resources/runtime/node/node.exe" "$env:AUDIT_APP/resources/runtime/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-release-audit
+          path: audit-results
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '24.18.1'}
+      - run: npm ci --prefix scripts/audit-tools --ignore-scripts --no-audit --no-fund
+      - name: Download, verify and mount the published DMG
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AUDIT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release download "$AUDIT_TAG" --pattern '*.dmg' --pattern '*.dmg.sha256' --dir release-download
+          (cd release-download && shasum -a 256 -c *.dmg.sha256)
+          hdiutil verify release-download/*.dmg
+          mkdir -p "$RUNNER_TEMP/deepseek-mount" audit-results
+          hdiutil attach release-download/*.dmg -nobrowse -readonly -mountpoint "$RUNNER_TEMP/deepseek-mount"
+          target="$RUNNER_TEMP/中文安装路径/DeepSeek Audit.app"
+          ditto "$RUNNER_TEMP/deepseek-mount/DeepSeek.app" "$target"
+          codesign --verify --deep --strict "$target"
+          echo "AUDIT_APP=$target" >> "$GITHUB_ENV"
+          cp release-download/*.sha256 audit-results/
+      - name: Audit all installed runtime package dependencies and official server imports
+        run: node scripts/audit-tools/audit.mjs "$AUDIT_APP/Contents/Resources/Runtime/dsh/node_modules" audit-results/macos-packages.json
+      - name: Test installed native runtime tools
+        run: '"$AUDIT_APP/Contents/Resources/Runtime/bin/node" scripts/audit-native.mjs "$AUDIT_APP/Contents/Resources/Runtime/dsh/node_modules"'
+      - name: Start installed runtime with isolated Chinese user data
+        run: node scripts/smoke-runtime.mjs "$AUDIT_APP/Contents/Resources/Runtime/bin/node" "$AUDIT_APP/Contents/Resources/Runtime/dsh/node_modules/@deepseek-ai/dsh/lib/bin.js"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-release-audit
+          path: audit-results
